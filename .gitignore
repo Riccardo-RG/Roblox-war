@@ -1,0 +1,12 @@
+node_modules/
+out/
+include/
+build/
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.tsbuildinfo
+.DS_Store
+npm-debug.log*
+

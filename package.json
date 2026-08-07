@@ -1,0 +1,29 @@
+{
+  "name": "war-world",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A server-authoritative Roblox PvPvE survival vertical slice built with TypeScript.",
+  "scripts": {
+    "build": "rbxtsc",
+    "watch": "rbxtsc --watch",
+    "typecheck": "rbxtsc",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "rojo:serve": "rojo serve default.project.json",
+    "rojo:build": "mkdir -p build && rojo build default.project.json --output build/WarWorld.rbxlx",
+    "rojo:sourcemap": "mkdir -p build && rojo sourcemap default.project.json --output build/sourcemap.json",
+    "validate": "node scripts/validate-project.mjs",
+    "check": "npm run typecheck && npm run format:check && npm run rojo:sourcemap && npm run validate && npm run rojo:build"
+  },
+  "devDependencies": {
+    "@rbxts/compiler-types": "3.0.0-types.0",
+    "@rbxts/services": "1.6.0",
+    "@rbxts/types": "1.0.942",
+    "prettier": "3.9.6",
+    "roblox-ts": "3.0.0",
+    "typescript": "5.5.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
