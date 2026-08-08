@@ -60,7 +60,8 @@
         "EnvironmentDiffuseScale": 0.35,
         "EnvironmentSpecularScale": 0.5,
         "GlobalShadows": true,
-        "OutdoorAmbient": [125, 135, 150]
+        "OutdoorAmbient": [125, 135, 150],
+        "Technology": "Voxel"
       }
     }
   }

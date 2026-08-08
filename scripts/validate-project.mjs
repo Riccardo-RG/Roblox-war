@@ -51,6 +51,10 @@ if (project.tree?.Workspace?.$properties?.StreamingEnabled !== true) {
   throw new Error("Workspace streaming must remain enabled for the generated world.");
 }
 
+if (project.tree?.Lighting?.$properties?.Technology !== "Voxel") {
+  throw new Error("Lighting must explicitly use Voxel to avoid Studio migration prompts.");
+}
+
 for (const script of [
   "typecheck",
   "format:check",
