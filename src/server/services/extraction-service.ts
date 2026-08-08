@@ -1,4 +1,5 @@
 import { Players, Workspace } from "@rbxts/services";
+import { localized, type LocalizedMessage } from "shared/localization/translations";
 import { MatchService } from "server/services/match-service";
 import { PlayerStateService } from "server/services/player-state-service";
 import { RateLimiter } from "server/services/rate-limiter";
@@ -11,7 +12,7 @@ export class ExtractionService {
     private readonly playerState: PlayerStateService,
     private readonly match: MatchService,
     private readonly teams: TeamService,
-    private readonly toast: (player: Player, message: string) => void,
+    private readonly toast: (player: Player, message: LocalizedMessage) => void,
   ) {}
 
   public start(): void {
@@ -48,7 +49,7 @@ export class ExtractionService {
 
     const cores = this.playerState.amount(player, "energy_core");
     if (cores <= 0) {
-      this.toast(player, "Porta qui un Nucleo energetico durante l'Estrazione");
+      this.toast(player, localized("toast.bring_core"));
       return;
     }
 
@@ -58,6 +59,6 @@ export class ExtractionService {
     this.playerState.awardProgress(player, cores * 100, cores * 25);
     this.playerState.recordExtraction(player);
     this.teams.addScore(player, cores * 100);
-    this.toast(player, `${cores} Nuclei estratti: ricompensa assicurata`);
+    this.toast(player, localized("toast.cores_extracted", { count: cores }));
   }
 }

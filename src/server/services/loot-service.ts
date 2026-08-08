@@ -1,5 +1,6 @@
 import { Workspace } from "@rbxts/services";
-import { ITEMS, type ItemId } from "shared/catalog/items";
+import type { ItemId } from "shared/catalog/items";
+import { localized, sourceFor, type LocalizedMessage } from "shared/localization/translations";
 import { PlayerStateService } from "server/services/player-state-service";
 import { TeamService } from "server/services/team-service";
 
@@ -12,7 +13,8 @@ export class LootService {
   public constructor(
     private readonly playerState: PlayerStateService,
     private readonly teams: TeamService,
-    private readonly toast: (player: Player, message: string) => void,
+    private readonly toast: (player: Player, message: LocalizedMessage) => void,
+    private readonly localizationTable: LocalizationTable,
   ) {
     this.folder = new Instance("Folder");
     this.folder.Name = "Loot";
@@ -56,8 +58,10 @@ export class LootService {
 
     const prompt = new Instance("ProximityPrompt");
     prompt.Name = "LootPrompt";
-    prompt.ActionText = "Recupera";
-    prompt.ObjectText = this.describe(remaining);
+    prompt.ActionText = sourceFor("prompt.recover");
+    prompt.ObjectText = sourceFor("prompt.recovery_cache");
+    prompt.AutoLocalize = true;
+    prompt.RootLocalizationTable = this.localizationTable;
     prompt.KeyboardKeyCode = Enum.KeyCode.E;
     prompt.MaxActivationDistance = 11;
     prompt.RequiresLineOfSight = false;
@@ -79,7 +83,7 @@ export class LootService {
         Workspace.GetServerTimeNow() < teamPriorityEndsAt &&
         this.teams.nameFor(collector) !== ownerTeam
       ) {
-        this.toast(collector, "La squadra eliminata ha qualche secondo per recuperarla");
+        this.toast(collector, localized("toast.loot_priority"));
         return;
       }
 
@@ -100,14 +104,12 @@ export class LootService {
       beingCollected = false;
 
       if (collected <= 0) {
-        this.toast(collector, "Inventario pieno");
+        this.toast(collector, localized("toast.inventory_full"));
         return;
       }
-      this.toast(collector, `${collected} oggetti recuperati`);
+      this.toast(collector, localized("toast.items_recovered", { count: collected }));
       if (remaining.size() === 0) {
         crate.Destroy();
-      } else {
-        prompt.ObjectText = this.describe(remaining);
       }
     });
 
@@ -120,21 +122,5 @@ export class LootService {
 
   public resetAll(): void {
     this.folder.ClearAllChildren();
-  }
-
-  private describe(entries: ReadonlyMap<ItemId, number>): string {
-    let total = 0;
-    let highlight: ItemId | undefined;
-    for (const [itemId, amount] of entries) {
-      total += amount;
-      if (highlight === undefined || itemId === "energy_core") {
-        highlight = itemId;
-      }
-    }
-    if (highlight === undefined) {
-      return "Cassa vuota";
-    }
-    const otherItems = math.max(0, total - (entries.get(highlight) ?? 0));
-    return `Cassa · ${ITEMS[highlight].displayName}${otherItems > 0 ? ` +${otherItems}` : ""}`;
   }
 }

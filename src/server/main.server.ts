@@ -1,6 +1,11 @@
 import { Players } from "@rbxts/services";
 import { isBuildPieceId } from "shared/catalog/build-pieces";
 import { isRecipeId } from "shared/catalog/recipes";
+import {
+  localized,
+  type LocalizationKey,
+  type LocalizedMessage,
+} from "shared/localization/translations";
 import type { ServerEvent, ToastTone } from "shared/network/protocol";
 import type { MatchPhase, PlayerSnapshot } from "shared/types/game";
 import { BuildingService } from "server/services/building-service";
@@ -20,6 +25,7 @@ import { TeamService } from "server/services/team-service";
 import { WorldBootstrapService } from "server/services/world-bootstrap-service";
 import { WorldEventService } from "server/services/world-event-service";
 import { runCatalogSmokeTests } from "server/tests/catalog-smoke-tests";
+import { installLocalizationTable } from "server/localization/install-localization";
 
 class WarWorldServer {
   private readonly network = new NetworkService();
@@ -40,20 +46,27 @@ class WarWorldServer {
   private readonly reconnect = new ReconnectService();
   private previousPhase: MatchPhase = "Scavenge";
 
-  public constructor() {
+  public constructor(private readonly localizationTable: LocalizationTable) {
     this.teams.initialize();
     this.world.initialize(this.teams.all());
 
-    const infoToast = (player: Player, message: string) => this.toast(player, message, "Info");
+    const infoToast = (player: Player, message: LocalizedMessage) =>
+      this.toast(player, message, "Info");
     this.resources = new ResourceService(this.playerState, infoToast);
     this.crafting = new CraftingService(this.playerState, infoToast);
-    this.building = new BuildingService(this.playerState, this.teams, this.match, infoToast);
-    this.loot = new LootService(this.playerState, this.teams, infoToast);
+    this.building = new BuildingService(
+      this.playerState,
+      this.teams,
+      this.match,
+      infoToast,
+      this.localizationTable,
+    );
+    this.loot = new LootService(this.playerState, this.teams, infoToast, this.localizationTable);
     this.npcs = new NpcService(
       (player) => {
         this.playerState.awardProgress(player, 25, 5);
         this.teams.addScore(player, 10);
-        this.toast(player, "Drone neutralizzato", "Success");
+        this.toast(player, localized("toast.drone_neutralized"), "Success");
       },
       (player) => this.playerState.get(player)?.isSpectator === false,
     );
@@ -149,11 +162,15 @@ class WarWorldServer {
         this.configureCharacter(player, player.Character);
       }
       if (assignedTeam === undefined) {
-        this.toast(player, "Stato recuperato, ma le squadre sono al completo", "Warning");
+        this.toast(player, localized("toast.reconnect_teams_full"), "Warning");
       } else if (assignedTeam.Name !== reconnect.teamName) {
-        this.toast(player, `Stato recuperato: nuova squadra ${assignedTeam.Name}`, "Warning");
+        this.toast(
+          player,
+          localized("toast.reconnect_new_team", { team: assignedTeam.Name }),
+          "Warning",
+        );
       } else {
-        this.toast(player, "Riconnessione riuscita: stato della campagna ripristinato", "Success");
+        this.toast(player, localized("toast.reconnect_success"), "Success");
       }
       this.sendSnapshot(player);
       return;
@@ -179,13 +196,13 @@ class WarWorldServer {
     }
 
     if (assignedTeam === undefined) {
-      this.toast(player, "Squadre al completo: sei in attesa di un posto", "Warning");
+      this.toast(player, localized("toast.teams_full"), "Warning");
     } else if (isSpectator) {
-      this.toast(player, "Partita in fase finale: entrerai nella prossima campagna", "Warning");
+      this.toast(player, localized("toast.late_spectator"), "Warning");
     } else if (this.match.currentPhase() === "Conflict") {
-      this.toast(player, "Backfill attivo: hai ricevuto un kit di recupero", "Success");
+      this.toast(player, localized("toast.backfill"), "Success");
     } else {
-      this.toast(player, "Raccogli, costruisci e preparati al Conflitto", "Info");
+      this.toast(player, localized("toast.welcome"), "Info");
     }
     this.sendSnapshot(player);
   }
@@ -230,11 +247,7 @@ class WarWorldServer {
           const latestState = this.playerState.get(player);
           if (latestState !== undefined && !latestState.isSpectator) {
             this.loot.dropFromElimination(player, root.Position);
-            this.toast(
-              player,
-              "Disattivato: una parte delle risorse è rimasta sul campo",
-              "Warning",
-            );
+            this.toast(player, localized("toast.eliminated_drop"), "Warning");
           }
         });
       }
@@ -341,14 +354,14 @@ class WarWorldServer {
       }
     }
 
-    const phaseMessage: Record<MatchPhase, string> = {
-      Scavenge: "Raccolta iniziata: costruisci il tuo avamposto",
-      Conflict: "Conflitto attivo: il PvP è ora abilitato",
-      Raid: "Fase Raid: le Cariche a impulsi sono attive",
-      Extraction: "Estrazione aperta al centro dell'isola",
-      Complete: "Campagna completata: nuova partita tra poco",
+    const phaseMessage: Record<MatchPhase, LocalizationKey> = {
+      Scavenge: "toast.phase.scavenge",
+      Conflict: "toast.phase.conflict",
+      Raid: "toast.phase.raid",
+      Extraction: "toast.phase.extraction",
+      Complete: "toast.phase.complete",
     };
-    this.broadcastToast(phaseMessage[current], current === "Raid" ? "Danger" : "Info");
+    this.broadcastToast(localized(phaseMessage[current]), current === "Raid" ? "Danger" : "Info");
   }
 
   private onMatchCompleted(): void {
@@ -360,14 +373,26 @@ class WarWorldServer {
       this.playerState.recordMatchCompleted(player);
       this.playerState.awardProgress(player, 100, 25);
     }
-    const winner = this.teams.winner();
+    const standings = this.teams.scoreSnapshot();
+    const winner = standings[0];
     if (winner !== undefined && winner.score > 0) {
-      this.broadcastToast(
-        `Vittoria ${winner.teamName} con ${winner.score} punti squadra`,
-        "Success",
-      );
+      const tiedTeams = standings.filter((entry) => entry.score === winner.score);
+      if (tiedTeams.size() > 1) {
+        this.broadcastToast(
+          localized("toast.tie", {
+            teams: tiedTeams.map((entry) => entry.teamName).join(", "),
+            score: winner.score,
+          }),
+          "Success",
+        );
+      } else {
+        this.broadcastToast(
+          localized("toast.winner", { team: winner.teamName, score: winner.score }),
+          "Success",
+        );
+      }
     } else {
-      this.broadcastToast("Campagna conclusa senza estrazioni", "Info");
+      this.broadcastToast(localized("toast.no_extraction"), "Info");
     }
   }
 
@@ -395,13 +420,13 @@ class WarWorldServer {
     }
   }
 
-  private toast(player: Player, message: string, tone: ToastTone): void {
+  private toast(player: Player, message: LocalizedMessage, tone: ToastTone): void {
     this.network.send(player, { kind: "Toast", message, tone });
   }
 
-  private broadcastToast(message: string, tone: ToastTone): void {
+  private broadcastToast(message: LocalizedMessage, tone: ToastTone): void {
     this.network.sendAll({ kind: "Toast", message, tone });
   }
 }
 
-new WarWorldServer().start();
+new WarWorldServer(installLocalizationTable()).start();

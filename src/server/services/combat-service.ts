@@ -1,4 +1,6 @@
 import { Players, Workspace } from "@rbxts/services";
+import { localized, type LocalizedMessage } from "shared/localization/translations";
+import { isFiniteVector3 } from "shared/util/math";
 import { MatchService } from "server/services/match-service";
 import { NpcService } from "server/services/npc-service";
 import { PlayerStateService } from "server/services/player-state-service";
@@ -10,6 +12,7 @@ const BLASTER_RANGE = 350;
 
 export class CombatService {
   private readonly rateLimiter = new RateLimiter();
+  private readonly lastShotSequences = new Map<Player, number>();
 
   public constructor(
     private readonly playerState: PlayerStateService,
@@ -18,15 +21,21 @@ export class CombatService {
     private readonly npcs: NpcService,
     private readonly hitConfirm: (player: Player, eliminated: boolean) => void,
     private readonly shotEffect: (player: Player, origin: Vector3, endpoint: Vector3) => void,
-    private readonly toast: (player: Player, message: string) => void,
+    private readonly toast: (player: Player, message: LocalizedMessage) => void,
   ) {}
 
-  public fire(player: Player, origin: Vector3, direction: Vector3, _sequence: number): void {
+  public fire(player: Player, origin: Vector3, direction: Vector3, sequence: number): void {
     const state = this.playerState.get(player);
+    const previousSequence = this.lastShotSequences.get(player) ?? 0;
     if (
       state === undefined ||
       state.isSpectator ||
       !this.playerState.has(player, "survival_blaster") ||
+      !isFiniteVector3(origin) ||
+      !isFiniteVector3(direction) ||
+      sequence !== math.floor(sequence) ||
+      sequence <= previousSequence ||
+      sequence > 1_000_000_000 ||
       !this.rateLimiter.allow(player, "FireWeapon", 0.26)
     ) {
       return;
@@ -40,6 +49,7 @@ export class CombatService {
     if (direction.Magnitude < 0.9 || direction.Magnitude > 1.1) {
       return;
     }
+    this.lastShotSequences.set(player, sequence);
 
     const parameters = new RaycastParams();
     parameters.FilterType = Enum.RaycastFilterType.Exclude;
@@ -88,14 +98,15 @@ export class CombatService {
       return;
     }
     if (!this.playerState.consume(player, "bandage", 1)) {
-      this.toast(player, "Nessuna Patch riparatrice");
+      this.toast(player, localized("toast.no_patch"));
       return;
     }
     humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + 35);
-    this.toast(player, "Integrità ripristinata");
+    this.toast(player, localized("toast.repaired"));
   }
 
   public removePlayer(player: Player): void {
     this.rateLimiter.removePlayer(player);
+    this.lastShotSequences.delete(player);
   }
 }

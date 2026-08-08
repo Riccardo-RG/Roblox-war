@@ -1,5 +1,10 @@
 import { CollectionService } from "@rbxts/services";
 import { RECIPES, type RecipeId } from "shared/catalog/recipes";
+import {
+  localized,
+  type LocalizationKey,
+  type LocalizedMessage,
+} from "shared/localization/translations";
 import { horizontalDistance } from "shared/util/math";
 import { PlayerStateService } from "server/services/player-state-service";
 import { RateLimiter } from "server/services/rate-limiter";
@@ -9,7 +14,7 @@ export class CraftingService {
 
   public constructor(
     private readonly playerState: PlayerStateService,
-    private readonly toast: (player: Player, message: string) => void,
+    private readonly toast: (player: Player, message: LocalizedMessage) => void,
   ) {}
 
   public craft(player: Player, recipeId: RecipeId): void {
@@ -24,15 +29,15 @@ export class CraftingService {
 
     const recipe = RECIPES[recipeId];
     if (recipe.requiresWorkbench && !this.isNearWorkbench(player)) {
-      this.toast(player, "Serve un banco da lavoro vicino");
+      this.toast(player, localized("toast.need_workbench"));
       return;
     }
     if (!this.playerState.canAfford(player, recipe.ingredients)) {
-      this.toast(player, "Risorse insufficienti");
+      this.toast(player, localized("toast.insufficient_resources"));
       return;
     }
     if (!this.playerState.canReceive(player, recipe.output.itemId, recipe.output.amount)) {
-      this.toast(player, "Non puoi trasportarne altri");
+      this.toast(player, localized("toast.carry_limit"));
       return;
     }
 
@@ -40,7 +45,12 @@ export class CraftingService {
       return;
     }
     this.playerState.add(player, recipe.output.itemId, recipe.output.amount);
-    this.toast(player, `${recipe.displayName} creato`);
+    const craftedMessages: Record<RecipeId, LocalizationKey> = {
+      survival_blaster: "toast.crafted_blaster",
+      bandage: "toast.crafted_bandage",
+      breach_charge: "toast.crafted_charge",
+    };
+    this.toast(player, localized(craftedMessages[recipeId]));
   }
 
   public removePlayer(player: Player): void {

@@ -1,8 +1,10 @@
 import { CollectionService, TweenService, Workspace } from "@rbxts/services";
 import { BUILD_PIECES, type BuildPieceId } from "shared/catalog/build-pieces";
 import { MAX_BUILD_PARTS_PER_PLAYER, WORLD_HALF_EXTENT } from "shared/catalog/match-config";
+import { localized, sourceFor, type LocalizedMessage } from "shared/localization/translations";
 import {
   horizontalDistance,
+  isFiniteCFrame,
   isFiniteVector3,
   sanitizeRightAngleYaw,
   snapNumber,
@@ -20,7 +22,8 @@ export class BuildingService {
     private readonly playerState: PlayerStateService,
     private readonly teams: TeamService,
     private readonly match: MatchService,
-    private readonly toast: (player: Player, message: string) => void,
+    private readonly toast: (player: Player, message: LocalizedMessage) => void,
+    private readonly localizationTable: LocalizationTable,
   ) {
     this.buildsFolder = Workspace.WaitForChild("World")
       .WaitForChild("GeneratedWorld")
@@ -36,7 +39,7 @@ export class BuildingService {
       return;
     }
     if (state.buildPartCount >= MAX_BUILD_PARTS_PER_PLAYER) {
-      this.toast(player, "Limite costruzioni raggiunto");
+      this.toast(player, localized("toast.build_limit"));
       return;
     }
 
@@ -46,7 +49,7 @@ export class BuildingService {
       return;
     }
 
-    if (!isFiniteVector3(requestedCFrame.Position)) {
+    if (!isFiniteCFrame(requestedCFrame) || !isFiniteVector3(requestedCFrame.Position)) {
       return;
     }
     const snappedPosition = new Vector3(
@@ -67,15 +70,15 @@ export class BuildingService {
     const yaw = sanitizeRightAngleYaw(requestedCFrame);
     const sanitizedCFrame = new CFrame(snappedPosition).mul(CFrame.Angles(0, yaw, 0));
     if (!this.hasSupport(player, sanitizedCFrame, definition.size)) {
-      this.toast(player, "La costruzione deve poggiare sul terreno o su una base");
+      this.toast(player, localized("toast.build_support"));
       return;
     }
     if (this.overlapsExistingBuild(sanitizedCFrame, definition.size)) {
-      this.toast(player, "Spazio occupato");
+      this.toast(player, localized("toast.space_occupied"));
       return;
     }
     if (!this.playerState.canAfford(player, definition.costs)) {
-      this.toast(player, "Risorse insufficienti");
+      this.toast(player, localized("toast.insufficient_resources"));
       return;
     }
     if (!this.playerState.spend(player, definition.costs)) {
@@ -129,11 +132,11 @@ export class BuildingService {
     }
     const ownerTeam = buildRoot.GetAttribute("OwnerTeam");
     if (typeIs(ownerTeam, "string") && ownerTeam === this.teams.nameFor(player)) {
-      this.toast(player, "Non puoi danneggiare la base della squadra");
+      this.toast(player, localized("toast.friendly_base"));
       return;
     }
     if (!this.playerState.consume(player, "breach_charge", 1)) {
-      this.toast(player, "Serve una Carica a impulsi");
+      this.toast(player, localized("toast.need_charge"));
       return;
     }
 
@@ -146,9 +149,12 @@ export class BuildingService {
     if (nextHealth <= 0) {
       buildRoot.Destroy();
       this.playerState.awardProgress(player, 20, 5);
-      this.toast(player, "Difesa distrutta");
+      this.toast(player, localized("toast.defense_destroyed"));
     } else {
-      this.toast(player, `Integrità struttura: ${math.max(0, math.floor(nextHealth))}`);
+      this.toast(
+        player,
+        localized("toast.structure_integrity", { value: math.max(0, math.floor(nextHealth)) }),
+      );
     }
   }
 
@@ -227,8 +233,10 @@ export class BuildingService {
 
     const prompt = new Instance("ProximityPrompt");
     prompt.Name = "DoorPrompt";
-    prompt.ActionText = "Apri";
-    prompt.ObjectText = `Ingresso · ${this.teams.nameFor(player)}`;
+    prompt.ActionText = sourceFor("prompt.open");
+    prompt.ObjectText = sourceFor("prompt.team_entrance");
+    prompt.AutoLocalize = true;
+    prompt.RootLocalizationTable = this.localizationTable;
     prompt.KeyboardKeyCode = Enum.KeyCode.E;
     prompt.MaxActivationDistance = 12;
     prompt.RequiresLineOfSight = false;
@@ -243,7 +251,7 @@ export class BuildingService {
     }
     const ownerTeam = model.GetAttribute("OwnerTeam");
     if (!typeIs(ownerTeam, "string") || ownerTeam !== this.teams.nameFor(player)) {
-      this.toast(player, "Ingresso bloccato: appartiene a un'altra squadra");
+      this.toast(player, localized("toast.enemy_door"));
       return;
     }
     const closedCFrame = model.GetAttribute("ClosedDoorCFrame");
@@ -270,7 +278,7 @@ export class BuildingService {
       model.SetAttribute("DoorOpen", nowOpen);
       model.SetAttribute("DoorMoving", false);
       door.CanCollide = !nowOpen;
-      prompt.ActionText = nowOpen ? "Chiudi" : "Apri";
+      prompt.ActionText = sourceFor(nowOpen ? "prompt.close" : "prompt.open");
     });
     tween.Play();
   }

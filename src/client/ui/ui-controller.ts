@@ -1,9 +1,11 @@
 import { Players, RunService, TweenService, Workspace } from "@rbxts/services";
 import { BUILD_PIECES, BUILD_PIECE_IDS, type BuildPieceId } from "shared/catalog/build-pieces";
-import { ITEMS } from "shared/catalog/items";
+import type { ItemId } from "shared/catalog/items";
 import { RECIPES, RECIPE_IDS, type RecipeId } from "shared/catalog/recipes";
+import type { LocalizationKey, LocalizedMessage } from "shared/localization/translations";
 import type { ToastTone } from "shared/network/protocol";
 import type { PlayerSnapshot } from "shared/types/game";
+import { Localizer } from "client/localization/localizer";
 
 export type ActionMode = "Harvest" | "Build" | "Blaster" | "Raid";
 
@@ -28,55 +30,85 @@ const COLORS = {
 };
 
 interface TutorialStep {
-  readonly eyebrow: string;
-  readonly title: string;
-  readonly description: string;
-  readonly objective: string;
-  readonly controls: string;
+  readonly eyebrow: LocalizationKey;
+  readonly title: LocalizationKey;
+  readonly description: LocalizationKey;
+  readonly objective: LocalizationKey;
+  readonly controls: LocalizationKey;
 }
 
 const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
   {
-    eyebrow: "PASSO 1 · PREPARATI",
-    title: "La tua prima spedizione",
-    description:
-      "WAR WORLD è una corsa a squadre. Esplora l'isola, raccogli materiali e prepara un campo prima che inizi il conflitto.",
-    objective: "Adesso: cerca alberi, rocce, cespugli e cumuli di rottami.",
-    controls: "Prima persona · muoviti con WASD · mira col mouse · salta con SPAZIO",
+    eyebrow: "tutorial.step1.eyebrow",
+    title: "tutorial.step1.title",
+    description: "tutorial.step1.body",
+    objective: "tutorial.step1.objective",
+    controls: "tutorial.step1.controls",
   },
   {
-    eyebrow: "PASSO 2 · RACCOGLI",
-    title: "Recupera le risorse",
-    description:
-      "Premi 1, punta una risorsa vicina e fai clic. Ogni colpo trasferisce materiali nel tuo inventario sulla destra.",
-    objective: "Primo obiettivo: almeno 20 Legno e 15 Rottami.",
-    controls: "1 = modalità Raccolta · clic sinistro o AZIONE = raccogli",
+    eyebrow: "tutorial.step2.eyebrow",
+    title: "tutorial.step2.title",
+    description: "tutorial.step2.body",
+    objective: "tutorial.step2.objective",
+    controls: "tutorial.step2.controls",
   },
   {
-    eyebrow: "PASSO 3 · CREA",
-    title: "Costruisci il Blaster",
-    description:
-      "Nel pannello CREAZIONE scegli Blaster da recupero. Se mancano materiali, continua a raccogliere prima di riprovare.",
-    objective: "Crea il Blaster con 20 Legno + 15 Rottami.",
-    controls: "3 = equipaggia il Blaster · clic sinistro = spara",
+    eyebrow: "tutorial.step3.eyebrow",
+    title: "tutorial.step3.title",
+    description: "tutorial.step3.body",
+    objective: "tutorial.step3.objective",
+    controls: "tutorial.step3.controls",
   },
   {
-    eyebrow: "PASSO 4 · COSTRUISCI",
-    title: "Alza un campo sicuro",
-    description:
-      "Premi 2 e scegli Fondazione, Muro, Ingresso o Banco da lavoro. Il progetto azzurro mostra dove verrà piazzato il pezzo.",
-    objective: "Crea una Fondazione e proteggila con almeno due Muri.",
-    controls: "2 = costruisci · R = ruota · clic = conferma posizione",
+    eyebrow: "tutorial.step4.eyebrow",
+    title: "tutorial.step4.title",
+    description: "tutorial.step4.body",
+    objective: "tutorial.step4.objective",
+    controls: "tutorial.step4.controls",
   },
   {
-    eyebrow: "PASSO 5 · VINCI",
-    title: "Conflitto, raid ed estrazione",
-    description:
-      "Segui l'obiettivo in alto: contendi le casse, difendi la squadra e, nelle fasi finali, porta i Nuclei energetici all'anello centrale.",
-    objective: "Durante RAID usa una Carica a impulsi solo contro le basi rivali.",
-    controls: "4 = modalità Raid · B = usa Patch · ? = riapri questa guida",
+    eyebrow: "tutorial.step5.eyebrow",
+    title: "tutorial.step5.title",
+    description: "tutorial.step5.body",
+    objective: "tutorial.step5.objective",
+    controls: "tutorial.step5.controls",
   },
 ];
+
+const ITEM_KEYS: Record<ItemId, LocalizationKey> = {
+  wood: "item.wood",
+  stone: "item.stone",
+  scrap: "item.scrap",
+  fiber: "item.fiber",
+  energy_core: "item.energy_core",
+  multi_tool: "item.multi_tool",
+  survival_blaster: "item.survival_blaster",
+  bandage: "item.bandage",
+  breach_charge: "item.breach_charge",
+};
+
+const BUILD_KEYS: Record<BuildPieceId, LocalizationKey> = {
+  foundation: "build.foundation",
+  wall: "build.wall",
+  doorway: "build.doorway",
+  workbench: "build.workbench",
+};
+
+const PHASE_KEYS = {
+  Scavenge: "phase.scavenge",
+  Conflict: "phase.conflict",
+  Raid: "phase.raid",
+  Extraction: "phase.extraction",
+  Complete: "phase.complete",
+} as const satisfies Record<PlayerSnapshot["match"]["phase"], LocalizationKey>;
+
+const OBJECTIVE_KEYS = {
+  Scavenge: "objective.scavenge",
+  Conflict: "objective.conflict",
+  Raid: "objective.raid",
+  Extraction: "objective.extraction",
+  Complete: "objective.complete",
+} as const satisfies Record<PlayerSnapshot["match"]["phase"], LocalizationKey>;
 
 function addCorner(parent: GuiObject, radius = 8): void {
   const corner = new Instance("UICorner");
@@ -116,6 +148,7 @@ function button(name: string, label: string, parent: Instance): TextButton {
   result.Text = label;
   result.TextColor3 = COLORS.text;
   result.TextSize = 14;
+  result.TextWrapped = true;
   result.Parent = parent;
   addCorner(result, 7);
   addStroke(result);
@@ -130,6 +163,7 @@ function formatClock(seconds: number): string {
 }
 
 export class UiController {
+  private readonly localizer = new Localizer();
   private readonly screenGui = new Instance("ScreenGui");
   private readonly root = new Instance("Frame");
   private readonly rootScale = new Instance("UIScale");
@@ -137,6 +171,7 @@ export class UiController {
   private readonly timerLabel: TextLabel;
   private readonly playerLabel: TextLabel;
   private readonly objectiveLabel: TextLabel;
+  private readonly inventoryTitle: TextLabel;
   private readonly inventoryLabel: TextLabel;
   private readonly modeLabel: TextLabel;
   private readonly toastLabel: TextLabel;
@@ -149,9 +184,16 @@ export class UiController {
   private readonly tutorialBodyLabel = new Instance("TextLabel");
   private readonly tutorialObjectiveLabel = new Instance("TextLabel");
   private readonly tutorialControlsLabel = new Instance("TextLabel");
+  private tutorialGuideLabel!: TextLabel;
+  private tutorialCloseButton!: TextButton;
   private readonly tutorialPreviousButton = new Instance("TextButton");
   private readonly tutorialNextButton = new Instance("TextButton");
+  private readonly mobileActionButton: TextButton;
+  private craftTitle!: TextLabel;
+  private buildTitle!: TextLabel;
+  private bandageButton!: TextButton;
   private readonly modeButtons = new Map<ActionMode, TextButton>();
+  private readonly craftButtons = new Map<RecipeId, TextButton>();
   private readonly buildButtons = new Map<BuildPieceId, TextButton>();
   private selectedMode: ActionMode = "Harvest";
   private selectedBuild: BuildPieceId = "foundation";
@@ -165,6 +207,8 @@ export class UiController {
     this.screenGui.IgnoreGuiInset = false;
     this.screenGui.ResetOnSpawn = false;
     this.screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling;
+    this.screenGui.AutoLocalize = false;
+    this.screenGui.RootLocalizationTable = this.localizer.table;
     this.screenGui.Parent = Players.LocalPlayer.WaitForChild("PlayerGui");
 
     this.root.Name = "ScaledRoot";
@@ -184,7 +228,12 @@ export class UiController {
     addCorner(topPanel, 10);
     addStroke(topPanel);
 
-    this.phaseLabel = textLabel("Phase", "CARICAMENTO", new UDim2(0.7, 0, 0.55, 0), topPanel);
+    this.phaseLabel = textLabel(
+      "Phase",
+      this.localizer.text("ui.loading"),
+      new UDim2(0.7, 0, 0.55, 0),
+      topPanel,
+    );
     this.phaseLabel.Position = new UDim2(0.03, 0, 0.02, 0);
     this.phaseLabel.TextXAlignment = Enum.TextXAlignment.Left;
     this.phaseLabel.Font = Enum.Font.GothamBlack;
@@ -196,7 +245,12 @@ export class UiController {
     this.timerLabel.TextColor3 = COLORS.accent;
     this.timerLabel.TextSize = 22;
 
-    this.playerLabel = textLabel("Player", "Squadra: --", new UDim2(0.94, 0, 0, 24), topPanel);
+    this.playerLabel = textLabel(
+      "Player",
+      `${this.localizer.text("ui.team")}: --`,
+      new UDim2(0.94, 0, 0, 24),
+      topPanel,
+    );
     this.playerLabel.Position = new UDim2(0.03, 0, 0, 48);
     this.playerLabel.TextXAlignment = Enum.TextXAlignment.Left;
     this.playerLabel.TextColor3 = COLORS.muted;
@@ -204,7 +258,7 @@ export class UiController {
 
     this.objectiveLabel = textLabel(
       "Objective",
-      "Raccogli risorse e costruisci un riparo",
+      this.localizer.text("objective.scavenge"),
       new UDim2(0.94, 0, 0, 22),
       topPanel,
     );
@@ -224,19 +278,19 @@ export class UiController {
     addCorner(inventoryPanel, 10);
     addStroke(inventoryPanel);
 
-    const inventoryTitle = textLabel(
+    this.inventoryTitle = textLabel(
       "Title",
-      "INVENTARIO",
+      this.localizer.text("ui.inventory"),
       new UDim2(1, -20, 0, 36),
       inventoryPanel,
     );
-    inventoryTitle.Position = new UDim2(0, 10, 0, 5);
-    inventoryTitle.Font = Enum.Font.GothamBlack;
-    inventoryTitle.TextColor3 = COLORS.accent;
+    this.inventoryTitle.Position = new UDim2(0, 10, 0, 5);
+    this.inventoryTitle.Font = Enum.Font.GothamBlack;
+    this.inventoryTitle.TextColor3 = COLORS.accent;
 
     this.inventoryLabel = textLabel(
       "Contents",
-      "In attesa del server...",
+      this.localizer.text("ui.waiting_server"),
       new UDim2(1, -24, 1, -50),
       inventoryPanel,
     );
@@ -245,7 +299,12 @@ export class UiController {
     this.inventoryLabel.TextYAlignment = Enum.TextYAlignment.Top;
     this.inventoryLabel.TextSize = 14;
 
-    this.modeLabel = textLabel("Mode", "RACCOGLI", new UDim2(0, 300, 0, 34), this.root);
+    this.modeLabel = textLabel(
+      "Mode",
+      this.localizer.text("ui.mode.harvest"),
+      new UDim2(0, 300, 0, 34),
+      this.root,
+    );
     this.modeLabel.AnchorPoint = new Vector2(0.5, 1);
     this.modeLabel.Position = new UDim2(0.5, 0, 1, -72);
     this.modeLabel.Font = Enum.Font.GothamBlack;
@@ -257,13 +316,13 @@ export class UiController {
     this.createBuildPanel();
     this.createTutorial();
 
-    const actionButton = button("MobileAction", "AZIONE", this.root);
-    actionButton.AnchorPoint = new Vector2(1, 1);
-    actionButton.Position = new UDim2(1, -32, 1, -32);
-    actionButton.Size = new UDim2(0, 118, 0, 58);
-    actionButton.BackgroundColor3 = COLORS.accent;
-    actionButton.TextColor3 = COLORS.background;
-    actionButton.Activated.Connect(() => this.actions.performAction());
+    this.mobileActionButton = button("MobileAction", this.localizer.text("ui.action"), this.root);
+    this.mobileActionButton.AnchorPoint = new Vector2(1, 1);
+    this.mobileActionButton.Position = new UDim2(1, -32, 1, -32);
+    this.mobileActionButton.Size = new UDim2(0, 118, 0, 58);
+    this.mobileActionButton.BackgroundColor3 = COLORS.accent;
+    this.mobileActionButton.TextColor3 = COLORS.background;
+    this.mobileActionButton.Activated.Connect(() => this.actions.performAction());
 
     this.toastLabel = textLabel("Toast", "", new UDim2(0, 520, 0, 50), this.root);
     this.toastLabel.AnchorPoint = new Vector2(0.5, 0);
@@ -296,6 +355,7 @@ export class UiController {
       this.updateScale(),
     );
     RunService.RenderStepped.Connect(() => this.updateClock());
+    this.localizer.changed.Event.Connect(() => this.refreshLocalization());
     this.refreshButtonStates();
   }
 
@@ -311,37 +371,31 @@ export class UiController {
       this.tutorialOverlay.Visible = true;
     }
     this.lastMatchEndsAt = snapshot.match.matchEndsAt;
+    const phaseName = this.localizer.text(PHASE_KEYS[snapshot.match.phase]);
     this.phaseLabel.Text = snapshot.isSpectator
-      ? `SPETTATORE · ${string.upper(snapshot.match.phase)}`
-      : string.upper(snapshot.match.phase);
+      ? `${this.localizer.text("ui.spectator")} · ${phaseName}`
+      : phaseName;
     const ownScore = snapshot.teamScores.find((entry) => entry.teamName === snapshot.teamName);
     const leader = snapshot.teamScores[0];
-    this.playerLabel.Text = `Squadra: ${snapshot.teamName} · ${ownScore?.score ?? 0} punti   |   Livello ${snapshot.profile.level} · ${snapshot.profile.credits} crediti`;
-    const objectives: Record<string, string> = {
-      Scavenge: "Raccogli risorse, crea un Blaster e costruisci il campo",
-      Conflict: "Contendi la Cassa pubblica e guadagna punti squadra",
-      Raid: "Usa le Cariche a impulsi contro le basi rivali",
-      Extraction: "Porta i Nuclei energetici nell'anello centrale",
-      Complete: "Campagna conclusa: preparazione della prossima partita",
-    };
+    this.playerLabel.Text = `${this.localizer.text("ui.team")}: ${this.teamName(snapshot.teamName)} · ${ownScore?.score ?? 0} ${this.localizer.text("ui.points")}   |   ${this.localizer.text("ui.level")} ${snapshot.profile.level} · ${snapshot.profile.credits} ${this.localizer.text("ui.credits")}`;
     this.objectiveLabel.Text = snapshot.isSpectator
-      ? "Osserva la fase finale: entrerai nella prossima campagna"
-      : `${objectives[snapshot.match.phase]}${leader !== undefined ? ` · Leader: ${leader.teamName} ${leader.score}` : ""}`;
+      ? this.localizer.text("objective.spectator")
+      : `${this.localizer.text(OBJECTIVE_KEYS[snapshot.match.phase])}${leader !== undefined ? ` · ${this.localizer.text("ui.leader")}: ${leader.teamName} ${leader.score}` : ""}`;
 
     const rows = snapshot.inventory.map((entry) => {
-      const definition = ITEMS[entry.itemId];
-      return `${definition.displayName}:  ${entry.amount}`;
+      return `${this.itemName(entry.itemId)}:  ${entry.amount}`;
     });
-    this.inventoryLabel.Text = rows.size() > 0 ? rows.join("\n") : "Inventario vuoto";
+    this.inventoryLabel.Text =
+      rows.size() > 0 ? rows.join("\n") : this.localizer.text("ui.empty_inventory");
   }
 
   public setMode(mode: ActionMode): void {
     this.selectedMode = mode;
     const labels: Record<ActionMode, string> = {
-      Harvest: "RACCOGLI",
-      Build: `COSTRUISCI · ${BUILD_PIECES[this.selectedBuild].displayName}`,
-      Blaster: "BLASTER",
-      Raid: "CARICA RAID",
+      Harvest: this.localizer.text("ui.mode.harvest"),
+      Build: `${this.localizer.text("ui.mode.build")} · ${this.buildName(this.selectedBuild)}`,
+      Blaster: this.localizer.text("ui.mode.blaster"),
+      Raid: this.localizer.text("ui.mode.raid"),
     };
     this.modeLabel.Text = labels[mode];
     this.refreshButtonStates();
@@ -350,12 +404,12 @@ export class UiController {
   public setBuildPiece(pieceId: BuildPieceId): void {
     this.selectedBuild = pieceId;
     if (this.selectedMode === "Build") {
-      this.modeLabel.Text = `COSTRUISCI · ${BUILD_PIECES[pieceId].displayName}`;
+      this.modeLabel.Text = `${this.localizer.text("ui.mode.build")} · ${this.buildName(pieceId)}`;
     }
     this.refreshButtonStates();
   }
 
-  public showToast(message: string, tone: ToastTone): void {
+  public showToast(message: LocalizedMessage, tone: ToastTone): void {
     this.toastVersion += 1;
     const version = this.toastVersion;
     const toneColor: Record<ToastTone, Color3> = {
@@ -364,7 +418,7 @@ export class UiController {
       Warning: COLORS.warning,
       Danger: COLORS.danger,
     };
-    this.toastLabel.Text = message;
+    this.toastLabel.Text = this.localizer.message(message);
     this.toastLabel.TextColor3 = toneColor[tone];
     TweenService.Create(this.toastLabel, new TweenInfo(0.16), {
       BackgroundTransparency: 0.12,
@@ -389,6 +443,17 @@ export class UiController {
     TweenService.Create(this.hitMarker, new TweenInfo(0.28), { TextTransparency: 1 }).Play();
   }
 
+  public toggleTutorial(): void {
+    this.tutorialOverlay.Visible = !this.tutorialOverlay.Visible;
+    if (this.tutorialOverlay.Visible) {
+      this.renderTutorialStep();
+    }
+  }
+
+  public isTutorialOpen(): boolean {
+    return this.tutorialOverlay.Visible;
+  }
+
   private createActionBar(): void {
     const bar = new Instance("Frame");
     bar.Name = "ActionBar";
@@ -404,15 +469,15 @@ export class UiController {
     layout.Padding = new UDim(0, 8);
     layout.Parent = bar;
 
-    const definitions: ReadonlyArray<[ActionMode, string]> = [
-      ["Harvest", "1 · RACCOGLI"],
-      ["Build", "2 · COSTRUISCI"],
-      ["Blaster", "3 · BLASTER"],
-      ["Raid", "4 · RAID"],
+    const definitions: ReadonlyArray<[ActionMode, LocalizationKey]> = [
+      ["Harvest", "ui.action.harvest"],
+      ["Build", "ui.action.build"],
+      ["Blaster", "ui.action.blaster"],
+      ["Raid", "ui.action.raid"],
     ];
     for (let index = 0; index < definitions.size(); index += 1) {
-      const [mode, label] = definitions[index]!;
-      const modeButton = button(mode, label, bar);
+      const [mode, labelKey] = definitions[index]!;
+      const modeButton = button(mode, this.localizer.text(labelKey), bar);
       modeButton.LayoutOrder = index;
       modeButton.Activated.Connect(() => this.actions.selectMode(mode));
       this.modeButtons.set(mode, modeButton);
@@ -439,34 +504,40 @@ export class UiController {
     layout.Padding = new UDim(0, 7);
     layout.Parent = panel;
 
-    const title = textLabel("CraftTitle", "CREAZIONE", new UDim2(0, 180, 0, 25), panel);
-    title.LayoutOrder = 0;
-    title.TextXAlignment = Enum.TextXAlignment.Left;
-    title.Font = Enum.Font.GothamBlack;
-    title.TextSize = 13;
-    title.TextColor3 = COLORS.accent;
+    this.craftTitle = textLabel(
+      "CraftTitle",
+      this.localizer.text("ui.crafting"),
+      new UDim2(0, 180, 0, 25),
+      panel,
+    );
+    this.craftTitle.LayoutOrder = 0;
+    this.craftTitle.TextXAlignment = Enum.TextXAlignment.Left;
+    this.craftTitle.Font = Enum.Font.GothamBlack;
+    this.craftTitle.TextSize = 13;
+    this.craftTitle.TextColor3 = COLORS.accent;
 
     for (let index = 0; index < RECIPE_IDS.size(); index += 1) {
       const recipeId = RECIPE_IDS[index]!;
       const recipe = RECIPES[recipeId];
       const costs = recipe.ingredients
-        .map((ingredient) => `${ingredient.amount} ${ITEMS[ingredient.itemId].displayName}`)
+        .map((ingredient) => `${ingredient.amount} ${this.itemName(ingredient.itemId)}`)
         .join(" + ");
       const craftButton = button(
         `Craft_${recipeId}`,
-        `CREA · ${recipe.displayName}\n${costs}`,
+        `${this.localizer.text("ui.craft")} · ${this.itemName(recipe.output.itemId)}\n${costs}`,
         panel,
       );
       craftButton.Size = new UDim2(0, 180, 0, 48);
       craftButton.LayoutOrder = index + 1;
       craftButton.TextSize = 11;
       craftButton.Activated.Connect(() => this.actions.craft(recipeId));
+      this.craftButtons.set(recipeId, craftButton);
     }
 
-    const bandageButton = button("UseBandage", "B · USA PATCH", panel);
-    bandageButton.Size = new UDim2(0, 180, 0, 42);
-    bandageButton.LayoutOrder = RECIPE_IDS.size() + 1;
-    bandageButton.Activated.Connect(() => this.actions.useBandage());
+    this.bandageButton = button("UseBandage", this.localizer.text("ui.use_patch"), panel);
+    this.bandageButton.Size = new UDim2(0, 180, 0, 42);
+    this.bandageButton.LayoutOrder = RECIPE_IDS.size() + 1;
+    this.bandageButton.Activated.Connect(() => this.actions.useBandage());
   }
 
   private createBuildPanel(): void {
@@ -490,21 +561,26 @@ export class UiController {
     layout.Padding = new UDim(0, 6);
     layout.Parent = panel;
 
-    const title = textLabel("BuildTitle", "COSTRUZIONE", new UDim2(0, 180, 0, 25), panel);
-    title.LayoutOrder = 0;
-    title.TextXAlignment = Enum.TextXAlignment.Left;
-    title.Font = Enum.Font.GothamBlack;
-    title.TextSize = 13;
-    title.TextColor3 = COLORS.success;
+    this.buildTitle = textLabel(
+      "BuildTitle",
+      this.localizer.text("ui.building"),
+      new UDim2(0, 180, 0, 25),
+      panel,
+    );
+    this.buildTitle.LayoutOrder = 0;
+    this.buildTitle.TextXAlignment = Enum.TextXAlignment.Left;
+    this.buildTitle.Font = Enum.Font.GothamBlack;
+    this.buildTitle.TextSize = 13;
+    this.buildTitle.TextColor3 = COLORS.success;
 
     for (let index = 0; index < BUILD_PIECE_IDS.size(); index += 1) {
       const pieceId = BUILD_PIECE_IDS[index]!;
       const costs = BUILD_PIECES[pieceId].costs
-        .map((cost) => `${cost.amount} ${ITEMS[cost.itemId].displayName}`)
+        .map((cost) => `${cost.amount} ${this.itemName(cost.itemId)}`)
         .join(" + ");
       const pieceButton = button(
         `Build_${pieceId}`,
-        `${string.upper(BUILD_PIECES[pieceId].displayName)}\n${costs}`,
+        `${string.upper(this.buildName(pieceId))}\n${costs}`,
         panel,
       );
       pieceButton.Size = new UDim2(0, 180, 0, 43);
@@ -558,21 +634,27 @@ export class UiController {
     accentBar.Parent = card;
     addCorner(accentBar, 14);
 
-    const guideLabel = textLabel("Guide", "GUIDA DI SOPRAVVIVENZA", new UDim2(0, 500, 0, 28), card);
-    guideLabel.Position = new UDim2(0, 34, 0, 24);
-    guideLabel.TextXAlignment = Enum.TextXAlignment.Left;
-    guideLabel.Font = Enum.Font.GothamBlack;
-    guideLabel.TextColor3 = COLORS.accent;
-    guideLabel.TextSize = 13;
-    guideLabel.ZIndex = 32;
+    this.tutorialGuideLabel = textLabel(
+      "Guide",
+      this.localizer.text("tutorial.guide"),
+      new UDim2(0, 500, 0, 28),
+      card,
+    );
+    this.tutorialGuideLabel.Position = new UDim2(0, 34, 0, 24);
+    this.tutorialGuideLabel.TextXAlignment = Enum.TextXAlignment.Left;
+    this.tutorialGuideLabel.Font = Enum.Font.GothamBlack;
+    this.tutorialGuideLabel.TextColor3 = COLORS.accent;
+    this.tutorialGuideLabel.TextSize = 13;
+    this.tutorialGuideLabel.ZIndex = 32;
 
-    const closeButton = button("CloseTutorial", "×", card);
-    closeButton.AnchorPoint = new Vector2(1, 0);
-    closeButton.Position = new UDim2(1, -20, 0, 18);
-    closeButton.Size = new UDim2(0, 38, 0, 38);
-    closeButton.TextSize = 24;
-    closeButton.ZIndex = 32;
-    closeButton.Activated.Connect(() => (overlay.Visible = false));
+    this.tutorialCloseButton = button("CloseTutorial", "×", card);
+    this.tutorialCloseButton.AnchorPoint = new Vector2(1, 0);
+    this.tutorialCloseButton.Position = new UDim2(1, -20, 0, 18);
+    this.tutorialCloseButton.Size = new UDim2(0, 38, 0, 38);
+    this.tutorialCloseButton.TextSize = 24;
+    this.tutorialCloseButton.ZIndex = 32;
+    this.tutorialCloseButton.Modal = true;
+    this.tutorialCloseButton.Activated.Connect(() => (overlay.Visible = false));
 
     this.configureTutorialLabel(
       this.tutorialStepLabel,
@@ -636,14 +718,22 @@ export class UiController {
       Enum.Font.Code,
     );
 
-    this.configureTutorialButton(this.tutorialPreviousButton, "INDIETRO", card);
+    this.configureTutorialButton(
+      this.tutorialPreviousButton,
+      this.localizer.text("tutorial.back"),
+      card,
+    );
     this.tutorialPreviousButton.Position = new UDim2(0, 34, 1, -62);
     this.tutorialPreviousButton.Activated.Connect(() => {
       this.tutorialStep = math.max(0, this.tutorialStep - 1);
       this.renderTutorialStep();
     });
 
-    this.configureTutorialButton(this.tutorialNextButton, "AVANTI", card);
+    this.configureTutorialButton(
+      this.tutorialNextButton,
+      this.localizer.text("tutorial.next"),
+      card,
+    );
     this.tutorialNextButton.AnchorPoint = new Vector2(1, 0);
     this.tutorialNextButton.Position = new UDim2(1, -36, 1, -62);
     this.tutorialNextButton.BackgroundColor3 = COLORS.accent;
@@ -693,6 +783,7 @@ export class UiController {
     result.TextColor3 = COLORS.text;
     result.TextSize = 13;
     result.ZIndex = 33;
+    result.Modal = true;
     result.Parent = parent;
     addCorner(result, 7);
     addStroke(result);
@@ -700,14 +791,72 @@ export class UiController {
 
   private renderTutorialStep(): void {
     const step = TUTORIAL_STEPS[this.tutorialStep]!;
-    this.tutorialStepLabel.Text = `${step.eyebrow}   ·   ${this.tutorialStep + 1}/${TUTORIAL_STEPS.size()}`;
-    this.tutorialTitleLabel.Text = step.title;
-    this.tutorialBodyLabel.Text = step.description;
-    this.tutorialObjectiveLabel.Text = step.objective;
-    this.tutorialControlsLabel.Text = step.controls;
+    this.tutorialStepLabel.Text = `${this.localizer.text(step.eyebrow)}   ·   ${this.tutorialStep + 1}/${TUTORIAL_STEPS.size()}`;
+    this.tutorialTitleLabel.Text = this.localizer.text(step.title);
+    this.tutorialBodyLabel.Text = this.localizer.text(step.description);
+    this.tutorialObjectiveLabel.Text = this.localizer.text(step.objective);
+    this.tutorialControlsLabel.Text = this.localizer.text(step.controls);
     this.tutorialPreviousButton.Visible = this.tutorialStep > 0;
     this.tutorialNextButton.Text =
-      this.tutorialStep === TUTORIAL_STEPS.size() - 1 ? "INIZIA A GIOCARE" : "AVANTI";
+      this.tutorialStep === TUTORIAL_STEPS.size() - 1
+        ? this.localizer.text("tutorial.start")
+        : this.localizer.text("tutorial.next");
+  }
+
+  private refreshLocalization(): void {
+    this.inventoryTitle.Text = this.localizer.text("ui.inventory");
+    this.mobileActionButton.Text = this.localizer.text("ui.action");
+    this.craftTitle.Text = this.localizer.text("ui.crafting");
+    this.buildTitle.Text = this.localizer.text("ui.building");
+    this.bandageButton.Text = this.localizer.text("ui.use_patch");
+    this.tutorialGuideLabel.Text = this.localizer.text("tutorial.guide");
+    this.tutorialPreviousButton.Text = this.localizer.text("tutorial.back");
+
+    const actionKeys: Record<ActionMode, LocalizationKey> = {
+      Harvest: "ui.action.harvest",
+      Build: "ui.action.build",
+      Blaster: "ui.action.blaster",
+      Raid: "ui.action.raid",
+    };
+    for (const [mode, modeButton] of this.modeButtons) {
+      modeButton.Text = this.localizer.text(actionKeys[mode]);
+    }
+    for (const [recipeId, craftButton] of this.craftButtons) {
+      const recipe = RECIPES[recipeId];
+      const costs = recipe.ingredients
+        .map((ingredient) => `${ingredient.amount} ${this.itemName(ingredient.itemId)}`)
+        .join(" + ");
+      craftButton.Text = `${this.localizer.text("ui.craft")} · ${this.itemName(recipe.output.itemId)}\n${costs}`;
+    }
+    for (const [pieceId, pieceButton] of this.buildButtons) {
+      const costs = BUILD_PIECES[pieceId].costs
+        .map((cost) => `${cost.amount} ${this.itemName(cost.itemId)}`)
+        .join(" + ");
+      pieceButton.Text = `${string.upper(this.buildName(pieceId))}\n${costs}`;
+    }
+
+    this.renderTutorialStep();
+    if (this.currentSnapshot !== undefined) {
+      this.setSnapshot(this.currentSnapshot);
+    } else {
+      this.phaseLabel.Text = this.localizer.text("ui.loading");
+      this.playerLabel.Text = `${this.localizer.text("ui.team")}: --`;
+      this.objectiveLabel.Text = this.localizer.text("objective.scavenge");
+      this.inventoryLabel.Text = this.localizer.text("ui.waiting_server");
+      this.setMode(this.selectedMode);
+    }
+  }
+
+  private itemName(itemId: ItemId): string {
+    return this.localizer.text(ITEM_KEYS[itemId]);
+  }
+
+  private buildName(pieceId: BuildPieceId): string {
+    return this.localizer.text(BUILD_KEYS[pieceId]);
+  }
+
+  private teamName(teamName: string): string {
+    return teamName === "Unassigned" ? this.localizer.text("team.unassigned") : teamName;
   }
 
   private refreshButtonStates(): void {
@@ -734,6 +883,8 @@ export class UiController {
 
   private updateScale(): void {
     const viewport = Workspace.CurrentCamera?.ViewportSize ?? new Vector2(1280, 720);
-    this.rootScale.Scale = math.clamp(viewport.X / 1280, 0.68, 1);
+    const widthScale = viewport.X / 1280;
+    const heightScale = viewport.Y / 720;
+    this.rootScale.Scale = math.clamp(math.min(widthScale, heightScale), 0.45, 1);
   }
 }

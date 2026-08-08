@@ -18,8 +18,14 @@ function defaultProfile(): PersistentProfile {
   };
 }
 
-function sanitizeNumber(value: unknown, fallback: number, minimum = 0): number {
-  if (!typeIs(value, "number") || value !== value || value < minimum) {
+function sanitizeNumber(value: unknown, fallback: number, minimum = 0, maximum = 1e12): number {
+  if (
+    !typeIs(value, "number") ||
+    value !== value ||
+    math.abs(value) >= math.huge ||
+    value < minimum ||
+    value > maximum
+  ) {
     return fallback;
   }
   return math.floor(value);
@@ -32,10 +38,11 @@ function sanitizeProfile(value: unknown): PersistentProfile {
   }
 
   const raw = value as Partial<PersistentProfile>;
+  const xp = sanitizeNumber(raw.xp, fallback.xp);
   return {
     schemaVersion: 1,
-    xp: sanitizeNumber(raw.xp, fallback.xp),
-    level: math.max(1, sanitizeNumber(raw.level, fallback.level, 1)),
+    xp,
+    level: math.max(1, math.floor(xp / 500) + 1),
     credits: sanitizeNumber(raw.credits, fallback.credits),
     matchesPlayed: sanitizeNumber(raw.matchesPlayed, fallback.matchesPlayed),
     successfulExtractions: sanitizeNumber(
@@ -48,6 +55,7 @@ function sanitizeProfile(value: unknown): PersistentProfile {
 
 export class ProfileStoreService {
   private readonly store: DataStore | undefined;
+  private readonly unsafeToSave = new Set<number>();
   private shuttingDown = false;
 
   public constructor() {
@@ -72,6 +80,7 @@ export class ProfileStoreService {
         return value;
       });
       if (success) {
+        this.unsafeToSave.delete(player.UserId);
         return sanitizeProfile(result);
       }
       warn(`[ProfileStore] Load attempt ${attempt} failed for ${player.Name}.`, result);
@@ -79,6 +88,7 @@ export class ProfileStoreService {
         task.wait(RETRY_BASE_SECONDS * attempt);
       }
     }
+    this.unsafeToSave.add(player.UserId);
     warn(`[ProfileStore] Using a temporary session profile for ${player.Name}.`);
     return defaultProfile();
   }
@@ -86,6 +96,12 @@ export class ProfileStoreService {
   public save(player: Player, profile: PersistentProfile): boolean {
     const store = this.store;
     if (store === undefined) {
+      return false;
+    }
+    if (this.unsafeToSave.has(player.UserId)) {
+      warn(
+        `[ProfileStore] Save skipped for ${player.Name}: this server could not safely load the stored profile.`,
+      );
       return false;
     }
     profile.lastSavedAt = os.time();

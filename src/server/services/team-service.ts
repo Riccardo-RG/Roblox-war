@@ -72,7 +72,7 @@ export class TeamService {
   }
 
   public nameFor(player: Player): string {
-    return player.Team?.Name ?? "Senza squadra";
+    return player.Team?.Name ?? "Unassigned";
   }
 
   public all(): ReadonlyArray<Team> {

@@ -8,7 +8,9 @@ const requiredFiles = [
   "src/shared/catalog/items.ts",
   "src/shared/catalog/recipes.ts",
   "src/shared/catalog/build-pieces.ts",
+  "src/shared/localization/translations.ts",
   "src/server/main.server.ts",
+  "src/server/localization/install-localization.ts",
   "src/server/services/building-service.ts",
   "src/server/services/combat-service.ts",
   "src/server/services/loot-service.ts",
@@ -19,12 +21,17 @@ const requiredFiles = [
   "src/server/world/world-art.ts",
   "src/client/main.client.ts",
   "src/client/controllers/game-controller.ts",
+  "src/client/localization/localizer.ts",
   "src/client/ui/ui-controller.ts",
+  "docs/LOCALIZZAZIONE.md",
   "docs/PLAYTEST_CHECKLIST.md",
   "docs/ARCHITETTURA.md",
   "docs/ROADMAP.md",
   "out/server/main.server.luau",
   "out/client/main.client.luau",
+  "out/shared/localization/translations.luau",
+  "out/client/localization/localizer.luau",
+  "out/server/localization/install-localization.luau",
   "build/sourcemap.json",
 ];
 
@@ -103,6 +110,7 @@ for (const script of [
   "typecheck",
   "format:check",
   "validate",
+  "validate:localization",
   "rojo:build",
   "rojo:sourcemap",
   "check",
@@ -149,16 +157,45 @@ const profileStoreSource = await readFile(
   path.join(root, "src/server/services/profile-store-service.ts"),
   "utf8",
 );
-for (const fallbackMarker of ["pcall(() => DataStoreService.GetDataStore", "store === undefined"]) {
+for (const fallbackMarker of [
+  "pcall(() => DataStoreService.GetDataStore",
+  "store === undefined",
+  "unsafeToSave",
+]) {
   if (!profileStoreSource.includes(fallbackMarker)) {
     throw new Error(`Studio profile fallback is missing guard: ${fallbackMarker}`);
   }
 }
 
 const uiSource = await readFile(path.join(root, "src/client/ui/ui-controller.ts"), "utf8");
-for (const tutorialMarker of ["TUTORIAL_STEPS", "TutorialOverlay", "TutorialHelp"]) {
+for (const tutorialMarker of [
+  "TUTORIAL_STEPS",
+  "TutorialOverlay",
+  "TutorialHelp",
+  "Modal = true",
+]) {
   if (!uiSource.includes(tutorialMarker)) {
     throw new Error(`Onboarding tutorial is missing UI marker: ${tutorialMarker}`);
+  }
+}
+
+const localizationSource = await readFile(
+  path.join(root, "src/shared/localization/translations.ts"),
+  "utf8",
+);
+for (const locale of ["en-us", "it-it", "es-es", "pt-br", "fr-fr", "de-de"]) {
+  if (!localizationSource.includes(`\"${locale}\"`)) {
+    throw new Error(`Localization catalog is missing supported locale: ${locale}`);
+  }
+}
+for (const localizationMarker of [
+  "validateLocalizationCatalog",
+  "tutorial.step5.controls",
+  "toast.phase.extraction",
+  "prompt.team_entrance",
+]) {
+  if (!localizationSource.includes(localizationMarker)) {
+    throw new Error(`Localization catalog is missing required entry: ${localizationMarker}`);
   }
 }
 

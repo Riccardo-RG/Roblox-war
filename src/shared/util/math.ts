@@ -31,3 +31,13 @@ export function isFiniteVector3(value: Vector3): boolean {
     math.abs(value.Z) < math.huge
   );
 }
+
+export function isFiniteCFrame(value: CFrame): boolean {
+  const [x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22] = value.GetComponents();
+  for (const component of [x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22]) {
+    if (component !== component || math.abs(component) >= math.huge) {
+      return false;
+    }
+  }
+  return true;
+}

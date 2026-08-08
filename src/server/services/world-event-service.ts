@@ -1,5 +1,6 @@
 import { CollectionService, Workspace } from "@rbxts/services";
 import { ITEMS, type ItemId } from "shared/catalog/items";
+import { localized, type LocalizedMessage } from "shared/localization/translations";
 import type { MatchPhase } from "shared/types/game";
 
 const EVENT_POSITIONS = [
@@ -13,7 +14,7 @@ export class WorldEventService {
   private readonly eventFolder: Folder;
   private readonly random = new Random(66204);
 
-  public constructor(private readonly announce: (message: string) => void) {
+  public constructor(private readonly announce: (message: LocalizedMessage) => void) {
     this.eventFolder = new Instance("Folder");
     this.eventFolder.Name = "PublicEvents";
     this.eventFolder.Parent = Workspace.WaitForChild("World").WaitForChild("GeneratedWorld");
@@ -24,13 +25,11 @@ export class WorldEventService {
     if (phase === "Conflict") {
       const position = this.randomPosition();
       this.spawnCache("Cassa di recupero", "scrap", position, 120, 12);
-      this.announce(
-        `Evento pubblico: Cassa di recupero alle coordinate ${this.coordinates(position)}`,
-      );
+      this.announce(localized("toast.event_cache", { coordinates: this.coordinates(position) }));
     } else if (phase === "Raid") {
       const position = this.randomPosition();
       this.spawnCache("Nucleo instabile", "energy_core", position, 100, 1);
-      this.announce(`Evento Raid: Nucleo instabile alle coordinate ${this.coordinates(position)}`);
+      this.announce(localized("toast.event_core", { coordinates: this.coordinates(position) }));
     }
   }
 

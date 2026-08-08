@@ -14,6 +14,8 @@ compilato in Luau con roblox-ts e sincronizzato con Roblox Studio attraverso Roj
 - Backfill con kit di recupero, spettatori nella fase finale e riconnessione di tre minuti.
 - Profilo persistente con fallback sicuro durante i test locali.
 - HUD e controlli generati dal codice per mouse/tastiera, touch e gamepad.
+- HUD, tutorial e messaggi localizzati in inglese, italiano, spagnolo, portoghese brasiliano,
+  francese e tedesco.
 - Validazione runtime e rate limiting sul confine tra client e server.
 
 ## Requisiti
@@ -50,7 +52,8 @@ Leggi [docs/ROBLOX_STUDIO.md](docs/ROBLOX_STUDIO.md) per i primi passi e
 [docs/PLAYTEST_CHECKLIST.md](docs/PLAYTEST_CHECKLIST.md) per provare il ciclo completo.
 [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) spiega il rapporto tra TypeScript, Rojo e Studio;
 [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) contiene le regole di design e
-[docs/ROADMAP.md](docs/ROADMAP.md) separa il prototipo dalle fasi alpha e beta.
+[docs/ROADMAP.md](docs/ROADMAP.md) separa il prototipo dalle fasi alpha e beta;
+[docs/LOCALIZZAZIONE.md](docs/LOCALIZZAZIONE.md) descrive lingue e controlli di qualità.
 
 ## Controllo qualità
 

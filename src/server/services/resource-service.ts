@@ -1,5 +1,6 @@
 import { CollectionService, Workspace } from "@rbxts/services";
 import { isItemId } from "shared/catalog/items";
+import { localized, type LocalizedMessage } from "shared/localization/translations";
 import { horizontalDistance } from "shared/util/math";
 import { PlayerStateService } from "server/services/player-state-service";
 import { RateLimiter } from "server/services/rate-limiter";
@@ -9,7 +10,7 @@ export class ResourceService {
 
   public constructor(
     private readonly playerState: PlayerStateService,
-    private readonly toast: (player: Player, message: string) => void,
+    private readonly toast: (player: Player, message: LocalizedMessage) => void,
   ) {}
 
   public harvest(player: Player, target: Instance): void {
@@ -41,7 +42,7 @@ export class ResourceService {
 
     const accepted = this.playerState.add(player, itemId, yieldPerHit);
     if (accepted <= 0) {
-      this.toast(player, "Inventario pieno");
+      this.toast(player, localized("toast.inventory_full"));
       return;
     }
 

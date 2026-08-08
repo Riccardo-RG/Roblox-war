@@ -8,6 +8,7 @@ import {
 } from "@rbxts/services";
 import { BUILD_PIECES, type BuildPieceId } from "shared/catalog/build-pieces";
 import type { RecipeId } from "shared/catalog/recipes";
+import { localized } from "shared/localization/translations";
 import {
   COMMAND_REMOTE_NAME,
   EVENT_REMOTE_NAME,
@@ -25,10 +26,13 @@ export class GameController {
   private readonly event: RemoteEvent;
   private readonly ui: UiController;
   private readonly buildPreview = new Instance("Part");
+  private readonly blasterViewModel = new Instance("Model");
   private selectedMode: ActionMode = "Harvest";
   private selectedBuildPiece: BuildPieceId = "foundation";
   private buildRotation = 0;
   private sequence = 0;
+  private hasBlaster = false;
+  private recoil = 0;
 
   public constructor() {
     const folder = ReplicatedStorage.WaitForChild(REMOTE_FOLDER_NAME);
@@ -44,6 +48,7 @@ export class GameController {
     });
 
     this.configurePreview();
+    this.configureBlasterViewModel();
   }
 
   public start(): void {
@@ -56,12 +61,22 @@ export class GameController {
         this.onInput(input);
       }
     });
-    RunService.RenderStepped.Connect(() => this.updateBuildPreview());
+    RunService.RenderStepped.Connect((deltaTime) => {
+      this.updateBuildPreview();
+      this.updateBlasterViewModel(deltaTime);
+    });
     this.send({ kind: "Ready" });
     print("[WAR WORLD] Client controller started.");
   }
 
   private onInput(input: InputObject): void {
+    if (input.KeyCode === Enum.KeyCode.T) {
+      this.ui.toggleTutorial();
+      return;
+    }
+    if (this.ui.isTutorialOpen()) {
+      return;
+    }
     if (input.UserInputType === Enum.UserInputType.MouseButton1) {
       this.performAction();
       return;
@@ -135,6 +150,11 @@ export class GameController {
       return;
     }
 
+    if (!this.hasBlaster) {
+      this.ui.showToast(localized("toast.need_blaster"), "Warning");
+      return;
+    }
+
     const camera = Workspace.CurrentCamera;
     const head = this.player.Character?.FindFirstChild("Head");
     if (camera === undefined || !head?.IsA("BasePart")) {
@@ -143,6 +163,7 @@ export class GameController {
     const viewport = camera.ViewportSize;
     const ray = camera.ViewportPointToRay(viewport.X / 2, viewport.Y / 2);
     this.sequence += 1;
+    this.recoil = 1;
     this.send({
       kind: "FireWeapon",
       weaponId: "survival_blaster",
@@ -158,6 +179,9 @@ export class GameController {
     }
     const event = payload as ServerEvent;
     if (event.kind === "Snapshot" || event.kind === "PhaseChanged") {
+      this.hasBlaster = event.snapshot.inventory.some(
+        (entry) => entry.itemId === "survival_blaster" && entry.amount > 0,
+      );
       this.ui.setSnapshot(event.snapshot);
     } else if (event.kind === "Toast") {
       this.ui.showToast(event.message, event.tone);
@@ -235,6 +259,127 @@ export class GameController {
     const definition = BUILD_PIECES[this.selectedBuildPiece];
     this.buildPreview.Size = definition.size;
     this.buildPreview.Color = definition.color;
+  }
+
+  private configureBlasterViewModel(): void {
+    this.blasterViewModel.Name = "FirstPersonBlaster";
+
+    const body = this.createViewModelPart(
+      "Receiver",
+      new Vector3(0.55, 0.5, 1.35),
+      new CFrame(0, 0, 0),
+      Color3.fromRGB(49, 62, 72),
+      Enum.Material.Metal,
+    );
+    body.Parent = this.blasterViewModel;
+    this.blasterViewModel.PrimaryPart = body;
+
+    const components = [
+      {
+        name: "Barrel",
+        size: new Vector3(0.24, 0.24, 1.3),
+        cframe: new CFrame(0, 0.04, -1.25),
+        color: Color3.fromRGB(32, 38, 43),
+        material: Enum.Material.Metal,
+      },
+      {
+        name: "BarrelShroud",
+        size: new Vector3(0.42, 0.36, 0.7),
+        cframe: new CFrame(0, 0.03, -0.77),
+        color: Color3.fromRGB(78, 96, 108),
+        material: Enum.Material.DiamondPlate,
+      },
+      {
+        name: "Grip",
+        size: new Vector3(0.34, 0.8, 0.42),
+        cframe: new CFrame(0, -0.56, 0.28).mul(CFrame.Angles(math.rad(-12), 0, 0)),
+        color: Color3.fromRGB(37, 42, 46),
+        material: Enum.Material.Metal,
+      },
+      {
+        name: "EnergyCell",
+        size: new Vector3(0.22, 0.4, 0.78),
+        cframe: new CFrame(-0.39, -0.03, 0.18),
+        color: Color3.fromRGB(75, 211, 232),
+        material: Enum.Material.Neon,
+      },
+      {
+        name: "RearBrace",
+        size: new Vector3(0.42, 0.35, 0.75),
+        cframe: new CFrame(0, -0.02, 0.85),
+        color: Color3.fromRGB(69, 82, 91),
+        material: Enum.Material.Metal,
+      },
+      {
+        name: "Sight",
+        size: new Vector3(0.13, 0.28, 0.42),
+        cframe: new CFrame(0, 0.38, -0.25),
+        color: Color3.fromRGB(89, 220, 240),
+        material: Enum.Material.Neon,
+      },
+    ] as const;
+    for (const component of components) {
+      const part = this.createViewModelPart(
+        component.name,
+        component.size,
+        component.cframe,
+        component.color,
+        component.material,
+      );
+      part.Parent = this.blasterViewModel;
+    }
+  }
+
+  private createViewModelPart(
+    name: string,
+    size: Vector3,
+    cframe: CFrame,
+    color: Color3,
+    material: Enum.Material,
+  ): Part {
+    const part = new Instance("Part");
+    part.Name = name;
+    part.Anchored = true;
+    part.CanCollide = false;
+    part.CanQuery = false;
+    part.CanTouch = false;
+    part.CastShadow = false;
+    part.Size = size;
+    part.CFrame = cframe;
+    part.Color = color;
+    part.Material = material;
+    part.TopSurface = Enum.SurfaceType.Smooth;
+    part.BottomSurface = Enum.SurfaceType.Smooth;
+    return part;
+  }
+
+  private updateBlasterViewModel(deltaTime: number): void {
+    const camera = Workspace.CurrentCamera;
+    const shouldShow =
+      camera !== undefined &&
+      this.selectedMode === "Blaster" &&
+      this.hasBlaster &&
+      !this.ui.isTutorialOpen();
+    if (!shouldShow || camera === undefined) {
+      this.blasterViewModel.Parent = undefined;
+      this.recoil = math.max(0, this.recoil - deltaTime * 9);
+      return;
+    }
+
+    if (this.blasterViewModel.Parent !== camera) {
+      this.blasterViewModel.Parent = camera;
+    }
+    const humanoid = this.player.Character?.FindFirstChildOfClass("Humanoid");
+    const moving = humanoid !== undefined && humanoid.MoveDirection.Magnitude > 0.05;
+    const elapsed = os.clock();
+    const bobX = moving ? math.sin(elapsed * 8) * 0.018 : 0;
+    const bobY = moving ? math.abs(math.cos(elapsed * 8)) * 0.016 : 0;
+    const recoilOffset = this.recoil * 0.12;
+    const target = camera.CFrame.mul(
+      new CFrame(0.62 + bobX, -0.58 + bobY, -1.1 + recoilOffset),
+    ).mul(CFrame.Angles(math.rad(-4 * this.recoil), math.rad(-2), 0));
+    this.blasterViewModel.PivotTo(target);
+    this.recoil = math.max(0, this.recoil - deltaTime * 9);
   }
 
   private updateBuildPreview(): void {

@@ -2,8 +2,10 @@ import { BUILD_PIECE_IDS, BUILD_PIECES } from "shared/catalog/build-pieces";
 import { ITEM_IDS, ITEMS } from "shared/catalog/items";
 import { MATCH_PHASES } from "shared/catalog/match-config";
 import { RECIPE_IDS, RECIPES } from "shared/catalog/recipes";
+import { validateLocalizationCatalog } from "shared/localization/translations";
 
 export function runCatalogSmokeTests(): void {
+  validateLocalizationCatalog();
   for (const itemId of ITEM_IDS) {
     const item = ITEMS[itemId];
     assert(item.id === itemId, `Item catalog key mismatch: ${itemId}`);

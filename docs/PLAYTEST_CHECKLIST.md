@@ -20,7 +20,9 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
 
 - La guida deve aprirsi automaticamente all'inizio della campagna, avanzare per cinque passi e
   chiudersi sia dalla `×` sia da **INIZIA A GIOCARE**.
-- Il piccolo pulsante `?` deve riaprire la guida senza coprire i controlli Roblox.
+- Il piccolo pulsante `?` e il tasto **T** devono riaprire la guida senza coprire i controlli
+  Roblox. Quando la guida è aperta il mouse deve poterne premere i pulsanti; quando è chiusa deve
+  tornare alla mira in prima persona.
 - Il personaggio deve comparire sulla piattaforma del colore della propria squadra.
 - La visuale deve essere bloccata in prima persona e il mirino deve restare al centro.
 - La barra inferiore deve rispettare l'ordine **1 Raccolta → 2 Costruisci → 3 Blaster → 4 Raid**.
@@ -29,6 +31,8 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
 - La quantità nell'inventario deve aumentare; il nodo esaurito scompare temporaneamente.
 - Anche foglie, frammenti, tubi e luci del nodo devono scomparire e ricomparire insieme.
 - Crea un Blaster e una Patch dai pulsanti a sinistra.
+- Selezionando **3 / BLASTER** prima della creazione deve apparire un avviso; dopo la creazione
+  deve comparire il modello del Blaster in prima persona e un leggero rinculo a ogni colpo.
 - Seleziona **2 / COSTRUISCI**, scegli una fondazione e posizionala vicino al personaggio.
 - Premi **R** per ruotare un muro prima di piazzarlo.
 - Con gamepad usa **LB/RB** per la modalità, **RT** per agire, **Y** per ruotare e **X** per la
@@ -63,7 +67,8 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
 - Porta almeno un Nucleo energetico nell'anello ciano al centro dell'isola.
 - Ogni Nucleo deve assegnare 100 punti squadra, 100 XP e 25 crediti.
 - Il Nucleo deve lasciare l'inventario e il contatore estrazioni aumentare una sola volta per match.
-- A fine campagna devono essere annunciati squadra vincitrice e punteggio.
+- A fine campagna devono essere annunciati squadra vincitrice e punteggio; punteggi uguali devono
+  produrre un pareggio, non una vittoria arbitraria.
 - Dopo 15 secondi devono azzerarsi costruzioni, casse, punteggi, inventari e stato spettatore.
 
 ## Riconnessione e persistenza
@@ -74,6 +79,18 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
   un'esperienza di test separata prima di provare DataStore.
 - Arresta e riavvia il server: con accesso API, XP e crediti devono tornare. Senza accesso API è
   previsto il profilo Studio temporaneo.
+
+## Lingue e leggibilità
+
+- Prova almeno italiano e inglese cambiando la lingua dell'account di test e riavviando la
+  sessione.
+- Devono cambiare HUD, tutorial, oggetti, crafting, costruzioni, messaggi del server e prompt di
+  porte/casse; nomi delle squadre e nome WAR WORLD restano invariati.
+- Nessun testo deve uscire dai pannelli a 1280×720 o nel Device Emulator mobile.
+- Se una lingua non supportata viene usata, il gioco deve mostrare l'inglese senza chiavi tecniche
+  come `toast.inventory_full`.
+- Prima di un test pubblico, spagnolo, portoghese brasiliano, francese e tedesco devono ricevere
+  una rilettura contestuale da parte di madrelingua.
 
 ## Criterio di superamento
 

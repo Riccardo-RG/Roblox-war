@@ -1,5 +1,6 @@
 import type { BuildPieceId } from "shared/catalog/build-pieces";
 import type { RecipeId } from "shared/catalog/recipes";
+import type { LocalizedMessage } from "shared/localization/translations";
 import type { PlayerSnapshot } from "shared/types/game";
 
 export const REMOTE_FOLDER_NAME = "WarWorldRemotes";
@@ -23,7 +24,7 @@ export type ClientCommand =
 
 export type ServerEvent =
   | { readonly kind: "Snapshot"; readonly snapshot: PlayerSnapshot }
-  | { readonly kind: "Toast"; readonly message: string; readonly tone: ToastTone }
+  | { readonly kind: "Toast"; readonly message: LocalizedMessage; readonly tone: ToastTone }
   | { readonly kind: "HitConfirm"; readonly eliminated: boolean }
   | {
       readonly kind: "ShotEffect";
