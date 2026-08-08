@@ -55,6 +55,17 @@ if (project.tree?.Lighting?.$properties?.Technology !== "Voxel") {
   throw new Error("Lighting must explicitly use Voxel to avoid Studio migration prompts.");
 }
 
+for (const colorProperty of ["Ambient", "OutdoorAmbient"]) {
+  const color = project.tree?.Lighting?.$properties?.[colorProperty];
+  if (
+    !Array.isArray(color) ||
+    color.length !== 3 ||
+    color.some((component) => typeof component !== "number" || component < 0 || component > 1)
+  ) {
+    throw new Error(`Lighting ${colorProperty} must use normalized Color3 components (0-1).`);
+  }
+}
+
 for (const script of [
   "typecheck",
   "format:check",

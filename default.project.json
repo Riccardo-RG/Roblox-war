@@ -54,13 +54,13 @@
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
-        "Ambient": [90, 105, 125],
+        "Ambient": [0.352941, 0.411765, 0.490196],
         "Brightness": 2.5,
         "ClockTime": 14,
         "EnvironmentDiffuseScale": 0.35,
         "EnvironmentSpecularScale": 0.5,
         "GlobalShadows": true,
-        "OutdoorAmbient": [125, 135, 150],
+        "OutdoorAmbient": [0.490196, 0.529412, 0.588235],
         "Technology": "Voxel"
       }
     }
