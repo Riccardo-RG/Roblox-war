@@ -263,14 +263,28 @@ export class WorldBootstrapService {
   }
 
   private configureLighting(): void {
+    // Apply a known-good runtime baseline too. Studio can keep stale Lighting values
+    // when an older .rbxlx is already open, so relying on the Rojo project alone can
+    // leave Color3 channels above 1 and completely wash out the world.
+    Lighting.Ambient = Color3.fromRGB(30, 38, 50);
+    Lighting.OutdoorAmbient = Color3.fromRGB(110, 125, 145);
+    Lighting.Brightness = 1.8;
+    Lighting.ClockTime = 13.5;
+    Lighting.EnvironmentDiffuseScale = 0.35;
+    Lighting.EnvironmentSpecularScale = 0.35;
+    Lighting.ExposureCompensation = -0.4;
+    Lighting.GlobalShadows = true;
+    Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0);
+    Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0);
+
     if (Lighting.FindFirstChildOfClass("Atmosphere") === undefined) {
       const atmosphere = new Instance("Atmosphere");
-      atmosphere.Density = 0.28;
-      atmosphere.Offset = 0.2;
+      atmosphere.Density = 0.22;
+      atmosphere.Offset = 0.1;
       atmosphere.Color = Color3.fromRGB(196, 222, 255);
       atmosphere.Decay = Color3.fromRGB(105, 126, 155);
-      atmosphere.Glare = 0.15;
-      atmosphere.Haze = 1.2;
+      atmosphere.Glare = 0;
+      atmosphere.Haze = 0.65;
       atmosphere.Parent = Lighting;
     }
   }

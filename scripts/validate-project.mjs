@@ -66,6 +66,23 @@ for (const colorProperty of ["Ambient", "OutdoorAmbient"]) {
   }
 }
 
+const lighting = project.tree?.Lighting?.$properties;
+if (
+  typeof lighting?.Brightness !== "number" ||
+  lighting.Brightness <= 0 ||
+  lighting.Brightness > 3
+) {
+  throw new Error("Lighting Brightness must stay within the safe 0-3 range.");
+}
+
+if (
+  typeof lighting?.ExposureCompensation !== "number" ||
+  lighting.ExposureCompensation < -2 ||
+  lighting.ExposureCompensation > 0
+) {
+  throw new Error("Lighting ExposureCompensation must stay within the safe -2 to 0 range.");
+}
+
 for (const script of [
   "typecheck",
   "format:check",
