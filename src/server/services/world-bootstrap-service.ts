@@ -1,30 +1,12 @@
 import { CollectionService, Lighting, Workspace } from "@rbxts/services";
 import { ITEMS, type ItemId } from "shared/catalog/items";
+import { createWorldPart, WorldArt } from "server/world/world-art";
 
 const RESOURCE_SEQUENCE: ReadonlyArray<ItemId> = ["wood", "stone", "scrap", "fiber"];
 
-function createPart(
-  name: string,
-  size: Vector3,
-  cframe: CFrame,
-  color: Color3,
-  material: Enum.Material,
-  parent: Instance,
-): Part {
-  const part = new Instance("Part");
-  part.Name = name;
-  part.Anchored = true;
-  part.Size = size;
-  part.CFrame = cframe;
-  part.Color = color;
-  part.Material = material;
-  part.TopSurface = Enum.SurfaceType.Smooth;
-  part.BottomSurface = Enum.SurfaceType.Smooth;
-  part.Parent = parent;
-  return part;
-}
-
 export class WorldBootstrapService {
+  private readonly art = new WorldArt();
+
   public initialize(teams: ReadonlyArray<Team>): void {
     const world = Workspace.WaitForChild("World") as Folder;
     world.ClearAllChildren();
@@ -50,152 +32,12 @@ export class WorldBootstrapService {
     enemies.Name = "Enemies";
     enemies.Parent = generated;
 
-    this.createEnvironment(generated);
-    this.createSpawns(generated, teams);
-    this.createMonuments(monuments);
+    this.art.createEnvironment(generated);
+    this.art.createSpawns(generated, teams);
+    this.art.createMonuments(monuments);
+    this.art.createScenery(generated);
     this.createResourceField(resources);
     this.configureLighting();
-  }
-
-  private createEnvironment(parent: Instance): void {
-    createPart(
-      "Island",
-      new Vector3(600, 8, 600),
-      new CFrame(0, -4, 0),
-      Color3.fromRGB(98, 143, 82),
-      Enum.Material.Grass,
-      parent,
-    );
-
-    const water = createPart(
-      "Water",
-      new Vector3(850, 4, 850),
-      new CFrame(0, -10, 0),
-      Color3.fromRGB(55, 145, 190),
-      Enum.Material.Glass,
-      parent,
-    );
-    water.Transparency = 0.35;
-    water.CanCollide = false;
-    water.CanQuery = false;
-
-    const boundaryFolder = new Instance("Folder");
-    boundaryFolder.Name = "Boundaries";
-    boundaryFolder.Parent = parent;
-    const boundaryData = [
-      [new Vector3(620, 60, 4), new CFrame(0, 26, -302)],
-      [new Vector3(620, 60, 4), new CFrame(0, 26, 302)],
-      [new Vector3(4, 60, 620), new CFrame(-302, 26, 0)],
-      [new Vector3(4, 60, 620), new CFrame(302, 26, 0)],
-    ] as const;
-    for (const [size, cframe] of boundaryData) {
-      const wall = createPart(
-        "WorldBoundary",
-        size,
-        cframe,
-        Color3.fromRGB(255, 255, 255),
-        Enum.Material.SmoothPlastic,
-        boundaryFolder,
-      );
-      wall.Transparency = 1;
-    }
-  }
-
-  private createSpawns(parent: Instance, teams: ReadonlyArray<Team>): void {
-    const spawns = new Instance("Folder");
-    spawns.Name = "Spawns";
-    spawns.Parent = parent;
-
-    assert(teams.size() > 0, "Teams must be initialized before the world is generated.");
-    for (let index = 0; index < teams.size(); index += 1) {
-      const team = teams[index]!;
-      const angle = (index / teams.size()) * math.pi * 2;
-      const position = new Vector3(math.cos(angle) * 205, 1, math.sin(angle) * 205);
-      const spawn = new Instance("SpawnLocation");
-      spawn.Name = `CampSpawn_${team.Name}`;
-      spawn.Anchored = true;
-      spawn.Size = new Vector3(12, 1, 12);
-      spawn.Position = position;
-      spawn.Neutral = false;
-      spawn.TeamColor = team.TeamColor;
-      spawn.AllowTeamChangeOnTouch = false;
-      spawn.Duration = 5;
-      spawn.Transparency = 0.25;
-      spawn.Material = Enum.Material.Neon;
-      spawn.Color = team.TeamColor.Color;
-      spawn.Parent = spawns;
-    }
-  }
-
-  private createMonuments(parent: Instance): void {
-    const definitions = [
-      {
-        name: "Deposito",
-        position: new Vector3(-115, 0, -70),
-        color: Color3.fromRGB(232, 151, 65),
-      },
-      {
-        name: "Laboratorio",
-        position: new Vector3(120, 0, -65),
-        color: Color3.fromRGB(82, 165, 232),
-      },
-      { name: "Centrale", position: new Vector3(0, 0, 125), color: Color3.fromRGB(178, 101, 226) },
-    ] as const;
-
-    for (const definition of definitions) {
-      const model = new Instance("Model");
-      model.Name = definition.name;
-      model.Parent = parent;
-
-      createPart(
-        "Platform",
-        new Vector3(62, 2, 50),
-        new CFrame(definition.position.add(new Vector3(0, 1, 0))),
-        Color3.fromRGB(92, 98, 105),
-        Enum.Material.Concrete,
-        model,
-      );
-      createPart(
-        "Tower",
-        new Vector3(16, 18, 16),
-        new CFrame(definition.position.add(new Vector3(0, 10, 0))),
-        definition.color,
-        Enum.Material.Metal,
-        model,
-      );
-      const beacon = createPart(
-        "Beacon",
-        new Vector3(4, 24, 4),
-        new CFrame(definition.position.add(new Vector3(0, 22, 0))),
-        Color3.fromRGB(94, 234, 255),
-        Enum.Material.Neon,
-        model,
-      );
-      beacon.CanCollide = false;
-
-      const workbench = createPart(
-        "PublicWorkbench",
-        new Vector3(7, 3, 3),
-        new CFrame(definition.position.add(new Vector3(18, 2.5, 8))),
-        Color3.fromRGB(80, 106, 122),
-        Enum.Material.Metal,
-        model,
-      );
-      CollectionService.AddTag(workbench, "Workbench");
-    }
-
-    const extraction = createPart(
-      "ExtractionZone",
-      new Vector3(2, 34, 34),
-      CFrame.Angles(0, 0, math.pi / 2).add(new Vector3(0, 1.1, 0)),
-      Color3.fromRGB(70, 235, 255),
-      Enum.Material.Neon,
-      parent,
-    );
-    extraction.Shape = Enum.PartType.Cylinder;
-    extraction.Transparency = 0.7;
-    extraction.CanCollide = false;
-    extraction.SetAttribute("ExtractionZone", true);
   }
 
   private createResourceField(parent: Instance): void {
@@ -209,9 +51,9 @@ export class WorldBootstrapService {
     }
 
     const corePositions = [
-      new Vector3(-115, 4, -70),
-      new Vector3(120, 4, -65),
-      new Vector3(0, 4, 125),
+      new Vector3(-102, 0, -61),
+      new Vector3(108, 0, -57),
+      new Vector3(0, 0, 125),
     ];
     for (let index = 0; index < corePositions.size(); index += 1) {
       this.createResourceNode(parent, "energy_core", corePositions[index]!, 1000 + index);
@@ -225,35 +67,37 @@ export class WorldBootstrapService {
     index: number,
   ): void {
     const definition = ITEMS[itemId];
-    const size =
-      itemId === "wood"
-        ? new Vector3(4, 12, 4)
-        : itemId === "fiber"
-          ? new Vector3(5, 4, 5)
-          : itemId === "energy_core"
-            ? new Vector3(4, 7, 4)
-            : new Vector3(6, 6, 6);
+    const centerHeight: Record<ItemId, number> = {
+      wood: 6,
+      stone: 2.6,
+      scrap: 1.2,
+      fiber: 1.25,
+      energy_core: 3.5,
+      multi_tool: 1,
+      survival_blaster: 1,
+      bandage: 1,
+      breach_charge: 1,
+    };
     const material =
       itemId === "wood"
         ? Enum.Material.Wood
         : itemId === "stone"
-          ? Enum.Material.Slate
+          ? Enum.Material.Rock
           : itemId === "energy_core"
             ? Enum.Material.Neon
-            : Enum.Material.SmoothPlastic;
-    const position = groundPosition.add(new Vector3(0, size.Y / 2, 0));
-    const node = createPart(
+            : itemId === "scrap"
+              ? Enum.Material.CorrodedMetal
+              : Enum.Material.LeafyGrass;
+    const node = createWorldPart(
       `${definition.displayName}_${index}`,
-      size,
-      new CFrame(position),
+      new Vector3(5, centerHeight[itemId] * 2, 5),
+      new CFrame(groundPosition.add(new Vector3(0, centerHeight[itemId], 0))),
       definition.color,
       material,
       parent,
     );
 
-    if (itemId === "stone" || itemId === "fiber") {
-      node.Shape = Enum.PartType.Ball;
-    }
+    this.art.decorateResourceNode(node, itemId, new Random(index * 7919 + 211));
     node.SetAttribute("ResourceItemId", itemId);
     node.SetAttribute("Remaining", itemId === "energy_core" ? 100 : 60);
     node.SetAttribute("MaximumRemaining", itemId === "energy_core" ? 100 : 60);
@@ -263,29 +107,81 @@ export class WorldBootstrapService {
   }
 
   private configureLighting(): void {
-    // Apply a known-good runtime baseline too. Studio can keep stale Lighting values
-    // when an older .rbxlx is already open, so relying on the Rojo project alone can
-    // leave Color3 channels above 1 and completely wash out the world.
-    Lighting.Ambient = Color3.fromRGB(30, 38, 50);
-    Lighting.OutdoorAmbient = Color3.fromRGB(110, 125, 145);
-    Lighting.Brightness = 1.8;
-    Lighting.ClockTime = 13.5;
-    Lighting.EnvironmentDiffuseScale = 0.35;
-    Lighting.EnvironmentSpecularScale = 0.35;
-    Lighting.ExposureCompensation = -0.4;
+    Lighting.Ambient = Color3.fromRGB(26, 31, 38);
+    Lighting.OutdoorAmbient = Color3.fromRGB(104, 117, 132);
+    Lighting.Brightness = 1.65;
+    Lighting.ClockTime = 15.2;
+    Lighting.GeographicLatitude = 38;
+    Lighting.EnvironmentDiffuseScale = 0.42;
+    Lighting.EnvironmentSpecularScale = 0.55;
+    Lighting.ExposureCompensation = -0.35;
     Lighting.GlobalShadows = true;
-    Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0);
-    Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0);
+    Lighting.ShadowSoftness = 0.22;
+    Lighting.ColorShift_Top = Color3.fromRGB(255, 244, 224);
+    Lighting.ColorShift_Bottom = Color3.fromRGB(20, 24, 29);
 
-    if (Lighting.FindFirstChildOfClass("Atmosphere") === undefined) {
-      const atmosphere = new Instance("Atmosphere");
-      atmosphere.Density = 0.22;
-      atmosphere.Offset = 0.1;
-      atmosphere.Color = Color3.fromRGB(196, 222, 255);
-      atmosphere.Decay = Color3.fromRGB(105, 126, 155);
-      atmosphere.Glare = 0;
-      atmosphere.Haze = 0.65;
+    let atmosphere = Lighting.FindFirstChildOfClass("Atmosphere");
+    if (atmosphere === undefined) {
+      atmosphere = new Instance("Atmosphere");
       atmosphere.Parent = Lighting;
     }
+    atmosphere.Density = 0.24;
+    atmosphere.Offset = 0.08;
+    atmosphere.Color = Color3.fromRGB(199, 218, 231);
+    atmosphere.Decay = Color3.fromRGB(92, 112, 126);
+    atmosphere.Glare = 0.04;
+    atmosphere.Haze = 0.8;
+
+    const existingColorGrade = Lighting.FindFirstChild("WarWorldColorGrade");
+    let colorGrade: ColorCorrectionEffect;
+    if (existingColorGrade?.IsA("ColorCorrectionEffect")) {
+      colorGrade = existingColorGrade;
+    } else {
+      existingColorGrade?.Destroy();
+      colorGrade = new Instance("ColorCorrectionEffect");
+      colorGrade.Name = "WarWorldColorGrade";
+      colorGrade.Parent = Lighting;
+    }
+    colorGrade.Brightness = -0.015;
+    colorGrade.Contrast = 0.09;
+    colorGrade.Saturation = -0.04;
+    colorGrade.TintColor = Color3.fromRGB(255, 247, 235);
+
+    const existingBloom = Lighting.FindFirstChild("WarWorldBloom");
+    let bloom: BloomEffect;
+    if (existingBloom?.IsA("BloomEffect")) {
+      bloom = existingBloom;
+    } else {
+      existingBloom?.Destroy();
+      bloom = new Instance("BloomEffect");
+      bloom.Name = "WarWorldBloom";
+      bloom.Parent = Lighting;
+    }
+    bloom.Intensity = 0.16;
+    bloom.Size = 18;
+    bloom.Threshold = 1.6;
+
+    const existingSunRays = Lighting.FindFirstChild("WarWorldSunRays");
+    let sunRays: SunRaysEffect;
+    if (existingSunRays?.IsA("SunRaysEffect")) {
+      sunRays = existingSunRays;
+    } else {
+      existingSunRays?.Destroy();
+      sunRays = new Instance("SunRaysEffect");
+      sunRays.Name = "WarWorldSunRays";
+      sunRays.Parent = Lighting;
+    }
+    sunRays.Intensity = 0.025;
+    sunRays.Spread = 0.62;
+
+    let clouds = Workspace.Terrain.FindFirstChildOfClass("Clouds");
+    if (clouds === undefined) {
+      clouds = new Instance("Clouds");
+      clouds.Parent = Workspace.Terrain;
+    }
+    clouds.Color = Color3.fromRGB(224, 229, 232);
+    clouds.Cover = 0.32;
+    clouds.Density = 0.28;
+    clouds.Enabled = true;
   }
 }

@@ -10,6 +10,28 @@ const DRONE_SPAWNS = [
   new Vector3(18, 5, 138),
 ];
 
+function createDronePart(
+  name: string,
+  size: Vector3,
+  cframe: CFrame,
+  color: Color3,
+  material: Enum.Material,
+  parent: Instance,
+): Part {
+  const part = new Instance("Part");
+  part.Name = name;
+  part.Anchored = true;
+  part.CanCollide = false;
+  part.Size = size;
+  part.CFrame = cframe;
+  part.Color = color;
+  part.Material = material;
+  part.TopSurface = Enum.SurfaceType.Smooth;
+  part.BottomSurface = Enum.SurfaceType.Smooth;
+  part.Parent = parent;
+  return part;
+}
+
 export class NpcService {
   private readonly enemiesFolder: Folder;
   private readonly drones = new Set<Model>();
@@ -99,18 +121,72 @@ export class NpcService {
     core.Anchored = true;
     core.CanCollide = true;
     core.Shape = Enum.PartType.Ball;
-    core.Size = new Vector3(5, 5, 5);
-    core.Color = Color3.fromRGB(235, 88, 112);
-    core.Material = Enum.Material.Neon;
+    core.Size = new Vector3(4.2, 2.7, 4.2);
+    core.Color = Color3.fromRGB(55, 62, 68);
+    core.Material = Enum.Material.Metal;
     core.CFrame = new CFrame(position);
     core.Parent = model;
     model.PrimaryPart = core;
 
-    const eye = new Instance("PointLight");
-    eye.Color = Color3.fromRGB(255, 95, 95);
-    eye.Range = 14;
-    eye.Brightness = 1.5;
-    eye.Parent = core;
+    const eye = createDronePart(
+      "Optic",
+      new Vector3(1.7, 0.75, 0.5),
+      new CFrame(position.add(new Vector3(0, 0.05, -2.05))),
+      Color3.fromRGB(242, 72, 91),
+      Enum.Material.Neon,
+      model,
+    );
+    eye.Shape = Enum.PartType.Ball;
+
+    for (let index = 0; index < 4; index += 1) {
+      const angle = (index / 4) * math.pi * 2 + math.pi / 4;
+      const direction = new Vector3(math.cos(angle), 0, math.sin(angle));
+      const armPosition = position.add(direction.mul(3.2));
+      createDronePart(
+        "RotorArm",
+        new Vector3(5.2, 0.35, 0.45),
+        new CFrame(position.add(direction.mul(2.4))).mul(CFrame.Angles(0, -angle, 0)),
+        Color3.fromRGB(69, 77, 81),
+        Enum.Material.Metal,
+        model,
+      );
+      const motor = createDronePart(
+        "RotorMotor",
+        new Vector3(1.1, 0.8, 1.1),
+        new CFrame(armPosition),
+        Color3.fromRGB(39, 44, 47),
+        Enum.Material.Metal,
+        model,
+      );
+      motor.Shape = Enum.PartType.Ball;
+      const rotor = createDronePart(
+        "Rotor",
+        new Vector3(0.15, 4.3, 4.3),
+        new CFrame(armPosition.add(new Vector3(0, 0.55, 0))).mul(CFrame.Angles(0, 0, math.pi / 2)),
+        Color3.fromRGB(36, 42, 45),
+        Enum.Material.Metal,
+        model,
+      );
+      rotor.Shape = Enum.PartType.Cylinder;
+      rotor.Transparency = 0.2;
+    }
+
+    const lowerSensor = createDronePart(
+      "LowerSensor",
+      new Vector3(1.4, 1.4, 1.4),
+      new CFrame(position.add(new Vector3(0, -1.7, 0))),
+      Color3.fromRGB(83, 95, 102),
+      Enum.Material.Metal,
+      model,
+    );
+    lowerSensor.Shape = Enum.PartType.Ball;
+
+    const eyeLight = new Instance("PointLight");
+    eyeLight.Color = Color3.fromRGB(255, 77, 91);
+    eyeLight.Range = 12;
+    eyeLight.Brightness = 0.85;
+    eyeLight.Shadows = true;
+    eyeLight.Parent = eye;
 
     CollectionService.AddTag(model, "EnemyNPC");
     this.drones.add(model);

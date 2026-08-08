@@ -16,6 +16,7 @@ const requiredFiles = [
   "src/server/services/profile-store-service.ts",
   "src/server/services/reconnect-service.ts",
   "src/server/services/world-event-service.ts",
+  "src/server/world/world-art.ts",
   "src/client/main.client.ts",
   "src/client/controllers/game-controller.ts",
   "src/client/ui/ui-controller.ts",
@@ -53,6 +54,13 @@ if (project.tree?.Workspace?.$properties?.StreamingEnabled !== true) {
 
 if (project.tree?.Lighting?.$properties?.Technology !== "Voxel") {
   throw new Error("Lighting must explicitly use Voxel to avoid Studio migration prompts.");
+}
+
+if (
+  project.tree?.Lighting?.$properties?.LightingStyle !== "Realistic" ||
+  project.tree?.Lighting?.$properties?.PrioritizeLightingQuality !== true
+) {
+  throw new Error("Lighting must keep the realistic high-quality rendering profile.");
 }
 
 for (const colorProperty of ["Ambient", "OutdoorAmbient"]) {
@@ -136,6 +144,25 @@ const profileStoreSource = await readFile(
 for (const fallbackMarker of ["pcall(() => DataStoreService.GetDataStore", "store === undefined"]) {
   if (!profileStoreSource.includes(fallbackMarker)) {
     throw new Error(`Studio profile fallback is missing guard: ${fallbackMarker}`);
+  }
+}
+
+const uiSource = await readFile(path.join(root, "src/client/ui/ui-controller.ts"), "utf8");
+for (const tutorialMarker of ["TUTORIAL_STEPS", "TutorialOverlay", "TutorialHelp"]) {
+  if (!uiSource.includes(tutorialMarker)) {
+    throw new Error(`Onboarding tutorial is missing UI marker: ${tutorialMarker}`);
+  }
+}
+
+const worldArtSource = await readFile(path.join(root, "src/server/world/world-art.ts"), "utf8");
+for (const worldMarker of [
+  "createScenery",
+  "createDepot",
+  "createLaboratory",
+  "createPowerStation",
+]) {
+  if (!worldArtSource.includes(worldMarker)) {
+    throw new Error(`Generated world art is missing feature: ${worldMarker}`);
   }
 }
 

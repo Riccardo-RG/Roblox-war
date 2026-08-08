@@ -2,16 +2,17 @@
 
 ## Stato attuale: vertical slice giocabile
 
-Il nucleo raccolta → crafting → base → conflitto → raid → estrazione è implementato. Il mondo e
-l'interfaccia sono graybox generati dal codice: servono a misurare se il loop diverte prima di
-investire in arte e contenuti costosi.
+Il nucleo raccolta → crafting → base → conflitto → raid → estrazione è implementato. Il primo
+passaggio artistico generato dal codice comprende costa, sentieri, vegetazione, risorse composte,
+tre monumenti distinti, accampamenti e illuminazione realistica. La guida iniziale in cinque passi
+è già integrata e riapribile durante la partita.
 
 ## Alpha interna
 
 - Eseguire playtest ripetuti da 2, 6 e 12 giocatori.
 - Bilanciare tempi, costi, danni, quantità di risorse e punteggi dai risultati osservati.
-- Sostituire il graybox con un art style originale, leggibile e adatto a un pubblico giovane.
-- Aggiungere animazioni, audio originale, tutorial iniziale e impostazioni accessibilità.
+- Raffinare l'art style originale con mesh, texture PBR e animazioni create appositamente.
+- Aggiungere audio originale, feedback di raccolta e impostazioni accessibilità.
 - Costruire lobby, party e matchmaking su server riservati.
 - Spostare la riconnessione su MemoryStore per recuperare il server corretto.
 

@@ -18,9 +18,15 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
 
 ## Raccolta — 45 secondi
 
+- La guida deve aprirsi automaticamente all'inizio della campagna, avanzare per cinque passi e
+  chiudersi sia dalla `×` sia da **INIZIA A GIOCARE**.
+- Il piccolo pulsante `?` deve riaprire la guida senza coprire i controlli Roblox.
 - Il personaggio deve comparire sulla piattaforma del colore della propria squadra.
+- La barra inferiore deve rispettare l'ordine **1 Raccolta → 2 Costruisci → 3 Blaster → 4 Raid**.
+- A sinistra deve comparire un solo pannello contestuale: Creazione oppure Costruzione.
 - Mira a un albero, roccia, rottame o cespuglio entro 16 stud e usa **1 / RACCOGLI**.
 - La quantità nell'inventario deve aumentare; il nodo esaurito scompare temporaneamente.
+- Anche foglie, frammenti, tubi e luci del nodo devono scomparire e ricomparire insieme.
 - Crea un Blaster e una Patch dai pulsanti a sinistra.
 - Seleziona **2 / COSTRUISCI**, scegli una fondazione e posizionala vicino al personaggio.
 - Premi **R** per ruotare un muro prima di piazzarlo.
@@ -70,6 +76,6 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
 
 ## Criterio di superamento
 
-Il prototipo è pronto per un graybox playtest esterno quando una campagna completa con due client
+Il prototipo è pronto per un playtest esterno quando una campagna completa con due client
 termina senza errori rossi in Output, danni non autorizzati, premi duplicati, porte bloccate o fasi
 che non avanzano.

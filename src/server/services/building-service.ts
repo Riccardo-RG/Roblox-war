@@ -93,6 +93,7 @@ export class BuildingService {
         definition.material,
       );
       this.configureBuildRoot(part, player, pieceId);
+      this.decorateBuildPart(part, pieceId);
       part.Parent = this.buildsFolder;
       CollectionService.AddTag(part, "PlayerBuild");
       if (pieceId === "workbench") {
@@ -291,6 +292,104 @@ export class BuildingService {
     part.TopSurface = Enum.SurfaceType.Smooth;
     part.BottomSurface = Enum.SurfaceType.Smooth;
     return part;
+  }
+
+  private decorateBuildPart(root: Part, pieceId: BuildPieceId): void {
+    if (pieceId === "foundation") {
+      for (const offset of [-4, 0, 4]) {
+        const seam = this.createBuildDetail(
+          "PlankSeam",
+          new Vector3(0.12, 0.08, 11.6),
+          root.CFrame.mul(new CFrame(offset, root.Size.Y / 2 + 0.05, 0)),
+          Color3.fromRGB(72, 52, 40),
+          Enum.Material.Wood,
+        );
+        seam.Parent = root;
+      }
+      for (const x of [-5.35, 5.35]) {
+        for (const z of [-5.35, 5.35]) {
+          const brace = this.createBuildDetail(
+            "CornerBrace",
+            new Vector3(0.8, 0.18, 0.8),
+            root.CFrame.mul(new CFrame(x, root.Size.Y / 2 + 0.12, z)),
+            Color3.fromRGB(73, 79, 81),
+            Enum.Material.Metal,
+          );
+          brace.Parent = root;
+        }
+      }
+      return;
+    }
+
+    if (pieceId === "wall") {
+      for (const x of [-5.35, 0, 5.35]) {
+        const post = this.createBuildDetail(
+          "WallPost",
+          new Vector3(0.7, 8.35, 1.35),
+          root.CFrame.mul(new CFrame(x, 0, 0)),
+          Color3.fromRGB(91, 65, 48),
+          Enum.Material.Wood,
+        );
+        post.Parent = root;
+      }
+      for (const y of [-3.2, 3.2]) {
+        const rail = this.createBuildDetail(
+          "WallRail",
+          new Vector3(11.4, 0.5, 1.28),
+          root.CFrame.mul(new CFrame(0, y, 0)),
+          Color3.fromRGB(83, 59, 44),
+          Enum.Material.Wood,
+        );
+        rail.Parent = root;
+      }
+      return;
+    }
+
+    if (pieceId === "workbench") {
+      root.Transparency = 1;
+      const top = this.createBuildDetail(
+        "WorkbenchTop",
+        new Vector3(6, 0.55, 3),
+        root.CFrame.mul(new CFrame(0, 1.2, 0)),
+        Color3.fromRGB(82, 94, 100),
+        Enum.Material.DiamondPlate,
+      );
+      top.Parent = root;
+      for (const x of [-2.35, 2.35]) {
+        for (const z of [-1.05, 1.05]) {
+          const leg = this.createBuildDetail(
+            "WorkbenchLeg",
+            new Vector3(0.45, 2.7, 0.45),
+            root.CFrame.mul(new CFrame(x, -0.15, z)),
+            Color3.fromRGB(57, 63, 66),
+            Enum.Material.Metal,
+          );
+          leg.Parent = root;
+        }
+      }
+      const toolbox = this.createBuildDetail(
+        "Toolbox",
+        new Vector3(2.1, 0.9, 1.15),
+        root.CFrame.mul(new CFrame(1.35, 1.95, 0)),
+        Color3.fromRGB(183, 111, 52),
+        Enum.Material.Metal,
+      );
+      toolbox.Parent = root;
+    }
+  }
+
+  private createBuildDetail(
+    name: string,
+    size: Vector3,
+    cframe: CFrame,
+    color: Color3,
+    material: Enum.Material,
+  ): Part {
+    const detail = this.createBuildPart(name, size, cframe, color, material);
+    detail.CanCollide = false;
+    detail.CanQuery = false;
+    detail.CanTouch = false;
+    return detail;
   }
 
   private configureBuildRoot(root: Instance, player: Player, pieceId: BuildPieceId): void {

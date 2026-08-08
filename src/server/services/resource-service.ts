@@ -63,16 +63,12 @@ export class ResourceService {
       }
       const maximum = instance.GetAttribute("MaximumRemaining");
       instance.SetAttribute("Remaining", typeIs(maximum, "number") ? maximum : 60);
-      instance.Transparency = 0;
-      instance.CanCollide = true;
-      instance.CanQuery = true;
+      this.setNodeVisible(instance, true);
     }
   }
 
   private deplete(node: BasePart): void {
-    node.Transparency = 1;
-    node.CanCollide = false;
-    node.CanQuery = false;
+    this.setNodeVisible(node, false);
     const respawnSeconds = node.GetAttribute("RespawnSeconds");
     const maximum = node.GetAttribute("MaximumRemaining");
     const delaySeconds = typeIs(respawnSeconds, "number") ? respawnSeconds : 25;
@@ -83,9 +79,45 @@ export class ResourceService {
         return;
       }
       node.SetAttribute("Remaining", maximumRemaining);
-      node.Transparency = 0;
-      node.CanCollide = true;
-      node.CanQuery = true;
+      this.setNodeVisible(node, true);
     });
+  }
+
+  private setNodeVisible(node: BasePart, visible: boolean): void {
+    const parts = [
+      node,
+      ...node
+        .GetDescendants()
+        .filter((descendant): descendant is BasePart => descendant.IsA("BasePart")),
+    ];
+    for (const part of parts) {
+      const originalTransparency = part.GetAttribute("ResourceOriginalTransparency");
+      const originalCanCollide = part.GetAttribute("ResourceOriginalCanCollide");
+      const originalCanQuery = part.GetAttribute("ResourceOriginalCanQuery");
+      if (!visible) {
+        if (!typeIs(originalTransparency, "number")) {
+          part.SetAttribute("ResourceOriginalTransparency", part.Transparency);
+          part.SetAttribute("ResourceOriginalCanCollide", part.CanCollide);
+          part.SetAttribute("ResourceOriginalCanQuery", part.CanQuery);
+        }
+        part.Transparency = 1;
+        part.CanCollide = false;
+        part.CanQuery = false;
+      } else if (
+        typeIs(originalTransparency, "number") &&
+        typeIs(originalCanCollide, "boolean") &&
+        typeIs(originalCanQuery, "boolean")
+      ) {
+        part.Transparency = originalTransparency;
+        part.CanCollide = originalCanCollide;
+        part.CanQuery = originalCanQuery;
+      }
+    }
+
+    for (const descendant of node.GetDescendants()) {
+      if (descendant.IsA("Light")) {
+        descendant.Enabled = visible;
+      }
+    }
   }
 }

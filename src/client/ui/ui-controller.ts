@@ -27,6 +27,57 @@ const COLORS = {
   danger: Color3.fromRGB(239, 91, 103),
 };
 
+interface TutorialStep {
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly description: string;
+  readonly objective: string;
+  readonly controls: string;
+}
+
+const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
+  {
+    eyebrow: "PASSO 1 · PREPARATI",
+    title: "La tua prima spedizione",
+    description:
+      "WAR WORLD è una corsa a squadre. Esplora l'isola, raccogli materiali e prepara un campo prima che inizi il conflitto.",
+    objective: "Adesso: cerca alberi, rocce, cespugli e cumuli di rottami.",
+    controls: "Muoviti con WASD · visuale con il mouse · salta con SPAZIO",
+  },
+  {
+    eyebrow: "PASSO 2 · RACCOGLI",
+    title: "Recupera le risorse",
+    description:
+      "Premi 1, punta una risorsa vicina e fai clic. Ogni colpo trasferisce materiali nel tuo inventario sulla destra.",
+    objective: "Primo obiettivo: almeno 20 Legno e 15 Rottami.",
+    controls: "1 = modalità Raccolta · clic sinistro o AZIONE = raccogli",
+  },
+  {
+    eyebrow: "PASSO 3 · CREA",
+    title: "Costruisci il Blaster",
+    description:
+      "Nel pannello CREAZIONE scegli Blaster da recupero. Se mancano materiali, continua a raccogliere prima di riprovare.",
+    objective: "Crea il Blaster con 20 Legno + 15 Rottami.",
+    controls: "3 = equipaggia il Blaster · clic sinistro = spara",
+  },
+  {
+    eyebrow: "PASSO 4 · COSTRUISCI",
+    title: "Alza un campo sicuro",
+    description:
+      "Premi 2 e scegli Fondazione, Muro, Ingresso o Banco da lavoro. Il progetto azzurro mostra dove verrà piazzato il pezzo.",
+    objective: "Crea una Fondazione e proteggila con almeno due Muri.",
+    controls: "2 = costruisci · R = ruota · clic = conferma posizione",
+  },
+  {
+    eyebrow: "PASSO 5 · VINCI",
+    title: "Conflitto, raid ed estrazione",
+    description:
+      "Segui l'obiettivo in alto: contendi le casse, difendi la squadra e, nelle fasi finali, porta i Nuclei energetici all'anello centrale.",
+    objective: "Durante RAID usa una Carica a impulsi solo contro le basi rivali.",
+    controls: "4 = modalità Raid · B = usa Patch · ? = riapri questa guida",
+  },
+];
+
 function addCorner(parent: GuiObject, radius = 8): void {
   const corner = new Instance("UICorner");
   corner.CornerRadius = new UDim(0, radius);
@@ -90,11 +141,23 @@ export class UiController {
   private readonly modeLabel: TextLabel;
   private readonly toastLabel: TextLabel;
   private readonly hitMarker: TextLabel;
+  private readonly craftPanel = new Instance("Frame");
+  private readonly buildPanel = new Instance("Frame");
+  private readonly tutorialOverlay = new Instance("Frame");
+  private readonly tutorialStepLabel = new Instance("TextLabel");
+  private readonly tutorialTitleLabel = new Instance("TextLabel");
+  private readonly tutorialBodyLabel = new Instance("TextLabel");
+  private readonly tutorialObjectiveLabel = new Instance("TextLabel");
+  private readonly tutorialControlsLabel = new Instance("TextLabel");
+  private readonly tutorialPreviousButton = new Instance("TextButton");
+  private readonly tutorialNextButton = new Instance("TextButton");
   private readonly modeButtons = new Map<ActionMode, TextButton>();
   private readonly buildButtons = new Map<BuildPieceId, TextButton>();
   private selectedMode: ActionMode = "Harvest";
   private selectedBuild: BuildPieceId = "foundation";
   private currentSnapshot: PlayerSnapshot | undefined;
+  private tutorialStep = 0;
+  private lastMatchEndsAt: number | undefined;
   private toastVersion = 0;
 
   public constructor(private readonly actions: UiActions) {
@@ -192,6 +255,7 @@ export class UiController {
     this.createActionBar();
     this.createCraftPanel();
     this.createBuildPanel();
+    this.createTutorial();
 
     const actionButton = button("MobileAction", "AZIONE", this.root);
     actionButton.AnchorPoint = new Vector2(1, 1);
@@ -237,6 +301,16 @@ export class UiController {
 
   public setSnapshot(snapshot: PlayerSnapshot): void {
     this.currentSnapshot = snapshot;
+    if (
+      snapshot.match.phase === "Scavenge" &&
+      (this.lastMatchEndsAt === undefined ||
+        math.abs(snapshot.match.matchEndsAt - this.lastMatchEndsAt) > 1)
+    ) {
+      this.tutorialStep = 0;
+      this.renderTutorialStep();
+      this.tutorialOverlay.Visible = true;
+    }
+    this.lastMatchEndsAt = snapshot.match.matchEndsAt;
     this.phaseLabel.Text = snapshot.isSpectator
       ? `SPETTATORE · ${string.upper(snapshot.match.phase)}`
       : string.upper(snapshot.match.phase);
@@ -336,26 +410,44 @@ export class UiController {
       ["Blaster", "3 · BLASTER"],
       ["Raid", "4 · RAID"],
     ];
-    for (const [mode, label] of definitions) {
+    for (let index = 0; index < definitions.size(); index += 1) {
+      const [mode, label] = definitions[index]!;
       const modeButton = button(mode, label, bar);
+      modeButton.LayoutOrder = index;
       modeButton.Activated.Connect(() => this.actions.selectMode(mode));
       this.modeButtons.set(mode, modeButton);
     }
   }
 
   private createCraftPanel(): void {
-    const panel = new Instance("Frame");
+    const panel = this.craftPanel;
     panel.Name = "CraftPanel";
-    panel.Position = new UDim2(0, 18, 0.5, -160);
-    panel.Size = new UDim2(0, 180, 0, 205);
-    panel.BackgroundTransparency = 1;
+    panel.Position = new UDim2(0, 18, 0.5, -132);
+    panel.Size = new UDim2(0, 196, 0, 240);
+    panel.BackgroundColor3 = COLORS.background;
+    panel.BackgroundTransparency = 0.12;
     panel.Parent = this.root;
+    addCorner(panel, 10);
+    addStroke(panel);
+
+    const padding = new Instance("UIPadding");
+    padding.PaddingTop = new UDim(0, 10);
+    padding.PaddingLeft = new UDim(0, 8);
+    padding.Parent = panel;
 
     const layout = new Instance("UIListLayout");
     layout.Padding = new UDim(0, 7);
     layout.Parent = panel;
 
-    for (const recipeId of RECIPE_IDS) {
+    const title = textLabel("CraftTitle", "CREAZIONE", new UDim2(0, 180, 0, 25), panel);
+    title.LayoutOrder = 0;
+    title.TextXAlignment = Enum.TextXAlignment.Left;
+    title.Font = Enum.Font.GothamBlack;
+    title.TextSize = 13;
+    title.TextColor3 = COLORS.accent;
+
+    for (let index = 0; index < RECIPE_IDS.size(); index += 1) {
+      const recipeId = RECIPE_IDS[index]!;
       const recipe = RECIPES[recipeId];
       const costs = recipe.ingredients
         .map((ingredient) => `${ingredient.amount} ${ITEMS[ingredient.itemId].displayName}`)
@@ -366,28 +458,47 @@ export class UiController {
         panel,
       );
       craftButton.Size = new UDim2(0, 180, 0, 48);
+      craftButton.LayoutOrder = index + 1;
       craftButton.TextSize = 11;
       craftButton.Activated.Connect(() => this.actions.craft(recipeId));
     }
 
     const bandageButton = button("UseBandage", "B · USA PATCH", panel);
     bandageButton.Size = new UDim2(0, 180, 0, 42);
+    bandageButton.LayoutOrder = RECIPE_IDS.size() + 1;
     bandageButton.Activated.Connect(() => this.actions.useBandage());
   }
 
   private createBuildPanel(): void {
-    const panel = new Instance("Frame");
+    const panel = this.buildPanel;
     panel.Name = "BuildPanel";
-    panel.Position = new UDim2(0, 18, 0.5, 58);
-    panel.Size = new UDim2(0, 180, 0, 200);
-    panel.BackgroundTransparency = 1;
+    panel.Position = new UDim2(0, 18, 0.5, -132);
+    panel.Size = new UDim2(0, 196, 0, 246);
+    panel.BackgroundColor3 = COLORS.background;
+    panel.BackgroundTransparency = 0.12;
+    panel.Visible = false;
     panel.Parent = this.root;
+    addCorner(panel, 10);
+    addStroke(panel);
+
+    const padding = new Instance("UIPadding");
+    padding.PaddingTop = new UDim(0, 10);
+    padding.PaddingLeft = new UDim(0, 8);
+    padding.Parent = panel;
 
     const layout = new Instance("UIListLayout");
     layout.Padding = new UDim(0, 6);
     layout.Parent = panel;
 
-    for (const pieceId of BUILD_PIECE_IDS) {
+    const title = textLabel("BuildTitle", "COSTRUZIONE", new UDim2(0, 180, 0, 25), panel);
+    title.LayoutOrder = 0;
+    title.TextXAlignment = Enum.TextXAlignment.Left;
+    title.Font = Enum.Font.GothamBlack;
+    title.TextSize = 13;
+    title.TextColor3 = COLORS.success;
+
+    for (let index = 0; index < BUILD_PIECE_IDS.size(); index += 1) {
+      const pieceId = BUILD_PIECE_IDS[index]!;
       const costs = BUILD_PIECES[pieceId].costs
         .map((cost) => `${cost.amount} ${ITEMS[cost.itemId].displayName}`)
         .join(" + ");
@@ -397,13 +508,211 @@ export class UiController {
         panel,
       );
       pieceButton.Size = new UDim2(0, 180, 0, 43);
+      pieceButton.LayoutOrder = index + 1;
       pieceButton.TextSize = 11;
       pieceButton.Activated.Connect(() => this.actions.selectBuildPiece(pieceId));
       this.buildButtons.set(pieceId, pieceButton);
     }
   }
 
+  private createTutorial(): void {
+    const helpButton = button("TutorialHelp", "?", this.root);
+    helpButton.Position = new UDim2(0, 316, 0, 18);
+    helpButton.Size = new UDim2(0, 38, 0, 38);
+    helpButton.BackgroundColor3 = COLORS.background;
+    helpButton.TextColor3 = COLORS.accent;
+    helpButton.TextSize = 20;
+    helpButton.ZIndex = 12;
+    helpButton.Activated.Connect(() => {
+      this.renderTutorialStep();
+      this.tutorialOverlay.Visible = true;
+    });
+
+    const overlay = this.tutorialOverlay;
+    overlay.Name = "TutorialOverlay";
+    overlay.Active = true;
+    overlay.BackgroundColor3 = Color3.fromRGB(5, 9, 15);
+    overlay.BackgroundTransparency = 0.28;
+    overlay.Size = UDim2.fromScale(1, 1);
+    overlay.ZIndex = 30;
+    overlay.Parent = this.root;
+
+    const card = new Instance("Frame");
+    card.Name = "TutorialCard";
+    card.AnchorPoint = new Vector2(0.5, 0.5);
+    card.Position = UDim2.fromScale(0.5, 0.5);
+    card.Size = new UDim2(0, 660, 0, 420);
+    card.BackgroundColor3 = COLORS.background;
+    card.BackgroundTransparency = 0.03;
+    card.ZIndex = 31;
+    card.Parent = overlay;
+    addCorner(card, 14);
+    addStroke(card, COLORS.accent, 0.12);
+
+    const accentBar = new Instance("Frame");
+    accentBar.Name = "AccentBar";
+    accentBar.Size = new UDim2(0, 7, 1, 0);
+    accentBar.BackgroundColor3 = COLORS.accent;
+    accentBar.BorderSizePixel = 0;
+    accentBar.ZIndex = 32;
+    accentBar.Parent = card;
+    addCorner(accentBar, 14);
+
+    const guideLabel = textLabel("Guide", "GUIDA DI SOPRAVVIVENZA", new UDim2(0, 500, 0, 28), card);
+    guideLabel.Position = new UDim2(0, 34, 0, 24);
+    guideLabel.TextXAlignment = Enum.TextXAlignment.Left;
+    guideLabel.Font = Enum.Font.GothamBlack;
+    guideLabel.TextColor3 = COLORS.accent;
+    guideLabel.TextSize = 13;
+    guideLabel.ZIndex = 32;
+
+    const closeButton = button("CloseTutorial", "×", card);
+    closeButton.AnchorPoint = new Vector2(1, 0);
+    closeButton.Position = new UDim2(1, -20, 0, 18);
+    closeButton.Size = new UDim2(0, 38, 0, 38);
+    closeButton.TextSize = 24;
+    closeButton.ZIndex = 32;
+    closeButton.Activated.Connect(() => (overlay.Visible = false));
+
+    this.configureTutorialLabel(
+      this.tutorialStepLabel,
+      "",
+      new UDim2(0, 580, 0, 24),
+      new UDim2(0, 34, 0, 70),
+      card,
+      12,
+      COLORS.warning,
+      Enum.Font.GothamBold,
+    );
+    this.configureTutorialLabel(
+      this.tutorialTitleLabel,
+      "",
+      new UDim2(0, 580, 0, 48),
+      new UDim2(0, 34, 0, 98),
+      card,
+      28,
+      COLORS.text,
+      Enum.Font.GothamBlack,
+    );
+    this.configureTutorialLabel(
+      this.tutorialBodyLabel,
+      "",
+      new UDim2(0, 580, 0, 82),
+      new UDim2(0, 34, 0, 154),
+      card,
+      16,
+      COLORS.muted,
+      Enum.Font.GothamMedium,
+    );
+
+    const objectivePanel = new Instance("Frame");
+    objectivePanel.Name = "ObjectivePanel";
+    objectivePanel.Position = new UDim2(0, 34, 0, 244);
+    objectivePanel.Size = new UDim2(0, 590, 0, 54);
+    objectivePanel.BackgroundColor3 = COLORS.panel;
+    objectivePanel.ZIndex = 32;
+    objectivePanel.Parent = card;
+    addCorner(objectivePanel, 8);
+    addStroke(objectivePanel, COLORS.warning, 0.45);
+    this.configureTutorialLabel(
+      this.tutorialObjectiveLabel,
+      "",
+      new UDim2(1, -24, 1, 0),
+      new UDim2(0, 12, 0, 0),
+      objectivePanel,
+      14,
+      COLORS.warning,
+      Enum.Font.GothamBold,
+    );
+
+    this.configureTutorialLabel(
+      this.tutorialControlsLabel,
+      "",
+      new UDim2(0, 590, 0, 38),
+      new UDim2(0, 34, 0, 310),
+      card,
+      13,
+      COLORS.muted,
+      Enum.Font.Code,
+    );
+
+    this.configureTutorialButton(this.tutorialPreviousButton, "INDIETRO", card);
+    this.tutorialPreviousButton.Position = new UDim2(0, 34, 1, -62);
+    this.tutorialPreviousButton.Activated.Connect(() => {
+      this.tutorialStep = math.max(0, this.tutorialStep - 1);
+      this.renderTutorialStep();
+    });
+
+    this.configureTutorialButton(this.tutorialNextButton, "AVANTI", card);
+    this.tutorialNextButton.AnchorPoint = new Vector2(1, 0);
+    this.tutorialNextButton.Position = new UDim2(1, -36, 1, -62);
+    this.tutorialNextButton.BackgroundColor3 = COLORS.accent;
+    this.tutorialNextButton.TextColor3 = COLORS.background;
+    this.tutorialNextButton.Activated.Connect(() => {
+      if (this.tutorialStep >= TUTORIAL_STEPS.size() - 1) {
+        overlay.Visible = false;
+        return;
+      }
+      this.tutorialStep += 1;
+      this.renderTutorialStep();
+    });
+
+    this.renderTutorialStep();
+  }
+
+  private configureTutorialLabel(
+    label: TextLabel,
+    labelText: string,
+    size: UDim2,
+    position: UDim2,
+    parent: Instance,
+    textSize: number,
+    color: Color3,
+    font: Enum.Font,
+  ): void {
+    label.BackgroundTransparency = 1;
+    label.Position = position;
+    label.Size = size;
+    label.Font = font;
+    label.Text = labelText;
+    label.TextColor3 = color;
+    label.TextSize = textSize;
+    label.TextWrapped = true;
+    label.TextXAlignment = Enum.TextXAlignment.Left;
+    label.TextYAlignment = Enum.TextYAlignment.Center;
+    label.ZIndex = 33;
+    label.Parent = parent;
+  }
+
+  private configureTutorialButton(result: TextButton, label: string, parent: Instance): void {
+    result.AutoButtonColor = true;
+    result.BackgroundColor3 = COLORS.panel;
+    result.Size = new UDim2(0, 132, 0, 42);
+    result.Font = Enum.Font.GothamBold;
+    result.Text = label;
+    result.TextColor3 = COLORS.text;
+    result.TextSize = 13;
+    result.ZIndex = 33;
+    result.Parent = parent;
+    addCorner(result, 7);
+    addStroke(result);
+  }
+
+  private renderTutorialStep(): void {
+    const step = TUTORIAL_STEPS[this.tutorialStep]!;
+    this.tutorialStepLabel.Text = `${step.eyebrow}   ·   ${this.tutorialStep + 1}/${TUTORIAL_STEPS.size()}`;
+    this.tutorialTitleLabel.Text = step.title;
+    this.tutorialBodyLabel.Text = step.description;
+    this.tutorialObjectiveLabel.Text = step.objective;
+    this.tutorialControlsLabel.Text = step.controls;
+    this.tutorialPreviousButton.Visible = this.tutorialStep > 0;
+    this.tutorialNextButton.Text =
+      this.tutorialStep === TUTORIAL_STEPS.size() - 1 ? "INIZIA A GIOCARE" : "AVANTI";
+  }
+
   private refreshButtonStates(): void {
+    this.craftPanel.Visible = this.selectedMode !== "Build";
+    this.buildPanel.Visible = this.selectedMode === "Build";
     for (const [mode, modeButton] of this.modeButtons) {
       modeButton.BackgroundColor3 = mode === this.selectedMode ? COLORS.accent : COLORS.panel;
       modeButton.TextColor3 = mode === this.selectedMode ? COLORS.background : COLORS.text;
