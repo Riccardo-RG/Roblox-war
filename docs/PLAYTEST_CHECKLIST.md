@@ -22,6 +22,7 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
   chiudersi sia dalla `×` sia da **INIZIA A GIOCARE**.
 - Il piccolo pulsante `?` deve riaprire la guida senza coprire i controlli Roblox.
 - Il personaggio deve comparire sulla piattaforma del colore della propria squadra.
+- La visuale deve essere bloccata in prima persona e il mirino deve restare al centro.
 - La barra inferiore deve rispettare l'ordine **1 Raccolta → 2 Costruisci → 3 Blaster → 4 Raid**.
 - A sinistra deve comparire un solo pannello contestuale: Creazione oppure Costruzione.
 - Mira a un albero, roccia, rottame o cespuglio entro 16 stud e usa **1 / RACCOGLI**.

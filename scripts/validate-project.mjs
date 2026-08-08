@@ -52,6 +52,14 @@ if (project.tree?.Workspace?.$properties?.StreamingEnabled !== true) {
   throw new Error("Workspace streaming must remain enabled for the generated world.");
 }
 
+if (
+  project.tree?.StarterPlayer?.$properties?.CameraMode !== "LockFirstPerson" ||
+  project.tree?.StarterPlayer?.$properties?.CameraMinZoomDistance !== 0.5 ||
+  project.tree?.StarterPlayer?.$properties?.CameraMaxZoomDistance !== 0.5
+) {
+  throw new Error("StarterPlayer must keep the locked first-person camera profile.");
+}
+
 if (project.tree?.Lighting?.$properties?.Technology !== "Voxel") {
   throw new Error("Lighting must explicitly use Voxel to avoid Studio migration prompts.");
 }

@@ -27,9 +27,12 @@
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "$properties": {
+        "CameraMaxZoomDistance": 0.5,
+        "CameraMinZoomDistance": 0.5,
+        "CameraMode": "LockFirstPerson",
         "CharacterWalkSpeed": 18,
         "CharacterJumpHeight": 7.2,
-        "EnableMouseLockOption": true
+        "EnableMouseLockOption": false
       },
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",

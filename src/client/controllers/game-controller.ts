@@ -47,6 +47,9 @@ export class GameController {
   }
 
   public start(): void {
+    this.player.CameraMode = Enum.CameraMode.LockFirstPerson;
+    this.player.CameraMinZoomDistance = 0.5;
+    this.player.CameraMaxZoomDistance = 0.5;
     this.event.OnClientEvent.Connect((payload: unknown) => this.onServerEvent(payload));
     UserInputService.InputBegan.Connect((input, processed) => {
       if (!processed) {

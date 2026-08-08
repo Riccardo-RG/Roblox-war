@@ -42,7 +42,7 @@ const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     description:
       "WAR WORLD è una corsa a squadre. Esplora l'isola, raccogli materiali e prepara un campo prima che inizi il conflitto.",
     objective: "Adesso: cerca alberi, rocce, cespugli e cumuli di rottami.",
-    controls: "Muoviti con WASD · visuale con il mouse · salta con SPAZIO",
+    controls: "Prima persona · muoviti con WASD · mira col mouse · salta con SPAZIO",
   },
   {
     eyebrow: "PASSO 2 · RACCOGLI",
