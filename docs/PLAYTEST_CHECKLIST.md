@@ -25,9 +25,13 @@ sviluppo è preferibile la sincronizzazione live di Rojo.
   tornare alla mira in prima persona.
 - Il personaggio deve comparire sulla piattaforma del colore della propria squadra.
 - La visuale deve essere bloccata in prima persona e il mirino deve restare al centro.
+- Il clic sinistro e il tasto **F** devono eseguire l'azione selezionata. Tenendo premuto
+  **Alt/Option** deve comparire il puntatore per usare crafting, costruzioni e pulsante `?`; al
+  rilascio deve tornare immediatamente la mira.
 - La barra inferiore deve rispettare l'ordine **1 Raccolta → 2 Costruisci → 3 Blaster → 4 Raid**.
 - A sinistra deve comparire un solo pannello contestuale: Creazione oppure Costruzione.
-- Mira a un albero, roccia, rottame o cespuglio entro 16 stud e usa **1 / RACCOGLI**.
+- Mira a un albero, roccia, rottame o cespuglio entro 16 stud, seleziona **1 / RACCOGLI** e usa
+  clic sinistro oppure **F**.
 - La quantità nell'inventario deve aumentare; il nodo esaurito scompare temporaneamente.
 - Anche foglie, frammenti, tubi e luci del nodo devono scomparire e ricomparire insieme.
 - Crea un Blaster e una Patch dai pulsanti a sinistra.

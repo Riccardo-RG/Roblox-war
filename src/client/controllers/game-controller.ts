@@ -33,6 +33,8 @@ export class GameController {
   private sequence = 0;
   private hasBlaster = false;
   private recoil = 0;
+  private tutorialVisible = true;
+  private menuCursorHeld = false;
 
   public constructor() {
     const folder = ReplicatedStorage.WaitForChild(REMOTE_FOLDER_NAME);
@@ -45,6 +47,10 @@ export class GameController {
       craft: (recipeId) => this.send({ kind: "Craft", recipeId }),
       useBandage: () => this.send({ kind: "UseBandage" }),
       performAction: () => this.performAction(),
+      tutorialVisibilityChanged: (visible) => {
+        this.tutorialVisible = visible;
+        this.updateMouseMode();
+      },
     });
 
     this.configurePreview();
@@ -52,16 +58,25 @@ export class GameController {
   }
 
   public start(): void {
-    this.player.CameraMode = Enum.CameraMode.LockFirstPerson;
-    this.player.CameraMinZoomDistance = 0.5;
-    this.player.CameraMaxZoomDistance = 0.5;
+    this.enforceFirstPerson();
+    this.tutorialVisible = this.ui.isTutorialOpen();
+    this.updateMouseMode();
+    this.player.CharacterAdded.Connect(() => task.defer(() => this.enforceFirstPerson()));
     this.event.OnClientEvent.Connect((payload: unknown) => this.onServerEvent(payload));
     UserInputService.InputBegan.Connect((input, processed) => {
       if (!processed) {
         this.onInput(input);
       }
     });
+    UserInputService.InputEnded.Connect((input) => {
+      if (input.KeyCode === Enum.KeyCode.LeftAlt || input.KeyCode === Enum.KeyCode.RightAlt) {
+        this.menuCursorHeld = false;
+        this.updateMouseMode();
+      }
+    });
     RunService.RenderStepped.Connect((deltaTime) => {
+      this.enforceFirstPerson();
+      this.updateMouseMode();
       this.updateBuildPreview();
       this.updateBlasterViewModel(deltaTime);
     });
@@ -70,18 +85,25 @@ export class GameController {
   }
 
   private onInput(input: InputObject): void {
+    if (input.KeyCode === Enum.KeyCode.LeftAlt || input.KeyCode === Enum.KeyCode.RightAlt) {
+      this.menuCursorHeld = true;
+      this.updateMouseMode();
+      return;
+    }
     if (input.KeyCode === Enum.KeyCode.T) {
       this.ui.toggleTutorial();
       return;
     }
-    if (this.ui.isTutorialOpen()) {
+    if (this.ui.isTutorialOpen() || this.menuCursorHeld) {
       return;
     }
     if (input.UserInputType === Enum.UserInputType.MouseButton1) {
       this.performAction();
       return;
     }
-    if (input.KeyCode === Enum.KeyCode.One) {
+    if (input.KeyCode === Enum.KeyCode.F) {
+      this.performAction();
+    } else if (input.KeyCode === Enum.KeyCode.One) {
       this.selectMode("Harvest");
     } else if (input.KeyCode === Enum.KeyCode.Two) {
       this.selectMode("Build");
@@ -110,6 +132,29 @@ export class GameController {
     const currentIndex = ACTION_MODES.indexOf(this.selectedMode);
     const nextIndex = (currentIndex + direction + ACTION_MODES.size()) % ACTION_MODES.size();
     this.selectMode(ACTION_MODES[nextIndex]!);
+  }
+
+  private enforceFirstPerson(): void {
+    if (this.player.CameraMode !== Enum.CameraMode.LockFirstPerson) {
+      this.player.CameraMode = Enum.CameraMode.LockFirstPerson;
+    }
+    if (this.player.CameraMinZoomDistance !== 0.5) {
+      this.player.CameraMinZoomDistance = 0.5;
+    }
+    if (this.player.CameraMaxZoomDistance !== 0.5) {
+      this.player.CameraMaxZoomDistance = 0.5;
+    }
+  }
+
+  private updateMouseMode(): void {
+    const cursorVisible = this.tutorialVisible || this.menuCursorHeld;
+    UserInputService.MouseIconEnabled = cursorVisible;
+    UserInputService.MouseBehavior = cursorVisible
+      ? Enum.MouseBehavior.Default
+      : Enum.MouseBehavior.LockCenter;
+    if (!cursorVisible) {
+      this.enforceFirstPerson();
+    }
   }
 
   private selectMode(mode: ActionMode): void {

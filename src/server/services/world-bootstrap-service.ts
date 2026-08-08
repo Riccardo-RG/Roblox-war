@@ -107,30 +107,30 @@ export class WorldBootstrapService {
   }
 
   private configureLighting(): void {
-    Lighting.Ambient = Color3.fromRGB(26, 31, 38);
-    Lighting.OutdoorAmbient = Color3.fromRGB(104, 117, 132);
-    Lighting.Brightness = 1.65;
+    Lighting.Ambient = Color3.fromRGB(70, 74, 82);
+    Lighting.OutdoorAmbient = Color3.fromRGB(142, 150, 158);
+    Lighting.Brightness = 2.05;
     Lighting.ClockTime = 15.2;
     Lighting.GeographicLatitude = 38;
-    Lighting.EnvironmentDiffuseScale = 0.42;
-    Lighting.EnvironmentSpecularScale = 0.55;
-    Lighting.ExposureCompensation = -0.35;
+    Lighting.EnvironmentDiffuseScale = 0.55;
+    Lighting.EnvironmentSpecularScale = 0.4;
+    Lighting.ExposureCompensation = -0.08;
     Lighting.GlobalShadows = true;
-    Lighting.ShadowSoftness = 0.22;
-    Lighting.ColorShift_Top = Color3.fromRGB(255, 244, 224);
-    Lighting.ColorShift_Bottom = Color3.fromRGB(20, 24, 29);
+    Lighting.ShadowSoftness = 0.18;
+    Lighting.ColorShift_Top = Color3.fromRGB(255, 252, 246);
+    Lighting.ColorShift_Bottom = Color3.fromRGB(72, 76, 82);
 
     let atmosphere = Lighting.FindFirstChildOfClass("Atmosphere");
     if (atmosphere === undefined) {
       atmosphere = new Instance("Atmosphere");
       atmosphere.Parent = Lighting;
     }
-    atmosphere.Density = 0.24;
-    atmosphere.Offset = 0.08;
-    atmosphere.Color = Color3.fromRGB(199, 218, 231);
-    atmosphere.Decay = Color3.fromRGB(92, 112, 126);
-    atmosphere.Glare = 0.04;
-    atmosphere.Haze = 0.8;
+    atmosphere.Density = 0.16;
+    atmosphere.Offset = 0.05;
+    atmosphere.Color = Color3.fromRGB(210, 224, 232);
+    atmosphere.Decay = Color3.fromRGB(128, 143, 151);
+    atmosphere.Glare = 0.015;
+    atmosphere.Haze = 0.35;
 
     const existingColorGrade = Lighting.FindFirstChild("WarWorldColorGrade");
     let colorGrade: ColorCorrectionEffect;
@@ -142,10 +142,10 @@ export class WorldBootstrapService {
       colorGrade.Name = "WarWorldColorGrade";
       colorGrade.Parent = Lighting;
     }
-    colorGrade.Brightness = -0.015;
-    colorGrade.Contrast = 0.09;
-    colorGrade.Saturation = -0.04;
-    colorGrade.TintColor = Color3.fromRGB(255, 247, 235);
+    colorGrade.Brightness = 0.025;
+    colorGrade.Contrast = 0.015;
+    colorGrade.Saturation = -0.09;
+    colorGrade.TintColor = Color3.fromRGB(255, 253, 249);
 
     const existingBloom = Lighting.FindFirstChild("WarWorldBloom");
     let bloom: BloomEffect;
@@ -157,9 +157,9 @@ export class WorldBootstrapService {
       bloom.Name = "WarWorldBloom";
       bloom.Parent = Lighting;
     }
-    bloom.Intensity = 0.16;
-    bloom.Size = 18;
-    bloom.Threshold = 1.6;
+    bloom.Intensity = 0.045;
+    bloom.Size = 12;
+    bloom.Threshold = 2;
 
     const existingSunRays = Lighting.FindFirstChild("WarWorldSunRays");
     let sunRays: SunRaysEffect;
@@ -171,17 +171,17 @@ export class WorldBootstrapService {
       sunRays.Name = "WarWorldSunRays";
       sunRays.Parent = Lighting;
     }
-    sunRays.Intensity = 0.025;
-    sunRays.Spread = 0.62;
+    sunRays.Intensity = 0.015;
+    sunRays.Spread = 0.55;
 
     let clouds = Workspace.Terrain.FindFirstChildOfClass("Clouds");
     if (clouds === undefined) {
       clouds = new Instance("Clouds");
       clouds.Parent = Workspace.Terrain;
     }
-    clouds.Color = Color3.fromRGB(224, 229, 232);
-    clouds.Cover = 0.32;
-    clouds.Density = 0.28;
+    clouds.Color = Color3.fromRGB(232, 235, 237);
+    clouds.Cover = 0.24;
+    clouds.Density = 0.2;
     clouds.Enabled = true;
   }
 }

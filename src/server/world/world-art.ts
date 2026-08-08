@@ -127,7 +127,7 @@ export class WorldArt {
       "IslandSoil",
       new Vector3(600, 14, 600),
       new CFrame(0, -7, 0),
-      Color3.fromRGB(79, 72, 55),
+      Color3.fromRGB(92, 83, 67),
       Enum.Material.Ground,
       parent,
     );
@@ -135,7 +135,7 @@ export class WorldArt {
       "IslandMeadow",
       new Vector3(596, 1.2, 596),
       new CFrame(0, -0.6, 0),
-      Color3.fromRGB(83, 118, 67),
+      Color3.fromRGB(92, 125, 78),
       Enum.Material.LeafyGrass,
       parent,
     );
@@ -983,7 +983,7 @@ export class WorldArt {
       "WeatheredPath",
       new Vector3(width, 0.28, direction.Magnitude),
       CFrame.lookAt(start.Lerp(finish, 0.5).add(new Vector3(0, 0.11, 0)), finish),
-      Color3.fromRGB(103, 92, 73),
+      Color3.fromRGB(113, 104, 87),
       Enum.Material.Ground,
       parent,
     );

@@ -172,7 +172,8 @@ for (const tutorialMarker of [
   "TUTORIAL_STEPS",
   "TutorialOverlay",
   "TutorialHelp",
-  "Modal = true",
+  "Modal = visible",
+  "SortOrder = Enum.SortOrder.LayoutOrder",
 ]) {
   if (!uiSource.includes(tutorialMarker)) {
     throw new Error(`Onboarding tutorial is missing UI marker: ${tutorialMarker}`);

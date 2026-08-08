@@ -57,17 +57,17 @@
     "Lighting": {
       "$className": "Lighting",
       "$properties": {
-        "Ambient": [0.101961, 0.121569, 0.14902],
-        "Brightness": 1.65,
+        "Ambient": [0.27451, 0.290196, 0.321569],
+        "Brightness": 2.05,
         "ClockTime": 15.2,
-        "EnvironmentDiffuseScale": 0.42,
-        "EnvironmentSpecularScale": 0.55,
-        "ExposureCompensation": -0.35,
+        "EnvironmentDiffuseScale": 0.55,
+        "EnvironmentSpecularScale": 0.4,
+        "ExposureCompensation": -0.08,
         "GlobalShadows": true,
         "LightingStyle": "Realistic",
-        "OutdoorAmbient": [0.407843, 0.458824, 0.517647],
+        "OutdoorAmbient": [0.556863, 0.588235, 0.619608],
         "PrioritizeLightingQuality": true,
-        "ShadowSoftness": 0.22,
+        "ShadowSoftness": 0.18,
         "Technology": "Voxel"
       }
     }

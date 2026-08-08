@@ -15,15 +15,16 @@ export interface UiActions {
   readonly craft: (recipeId: RecipeId) => void;
   readonly useBandage: () => void;
   readonly performAction: () => void;
+  readonly tutorialVisibilityChanged: (visible: boolean) => void;
 }
 
 const COLORS = {
   background: Color3.fromRGB(19, 27, 39),
   panel: Color3.fromRGB(31, 43, 59),
-  border: Color3.fromRGB(89, 220, 240),
+  border: Color3.fromRGB(88, 190, 207),
   text: Color3.fromRGB(240, 246, 255),
   muted: Color3.fromRGB(165, 182, 201),
-  accent: Color3.fromRGB(75, 211, 232),
+  accent: Color3.fromRGB(82, 190, 210),
   success: Color3.fromRGB(89, 220, 132),
   warning: Color3.fromRGB(245, 191, 73),
   danger: Color3.fromRGB(239, 91, 103),
@@ -174,6 +175,7 @@ export class UiController {
   private readonly inventoryTitle: TextLabel;
   private readonly inventoryLabel: TextLabel;
   private readonly modeLabel: TextLabel;
+  private readonly inputHintLabel: TextLabel;
   private readonly toastLabel: TextLabel;
   private readonly hitMarker: TextLabel;
   private readonly craftPanel = new Instance("Frame");
@@ -306,10 +308,22 @@ export class UiController {
       this.root,
     );
     this.modeLabel.AnchorPoint = new Vector2(0.5, 1);
-    this.modeLabel.Position = new UDim2(0.5, 0, 1, -72);
+    this.modeLabel.Position = new UDim2(0.5, 0, 1, -90);
     this.modeLabel.Font = Enum.Font.GothamBlack;
     this.modeLabel.TextColor3 = COLORS.accent;
     this.modeLabel.TextSize = 18;
+
+    this.inputHintLabel = textLabel(
+      "InputHint",
+      this.localizer.text("ui.input_hint"),
+      new UDim2(0, 500, 0, 18),
+      this.root,
+    );
+    this.inputHintLabel.AnchorPoint = new Vector2(0.5, 1);
+    this.inputHintLabel.Position = new UDim2(0.5, 0, 1, -69);
+    this.inputHintLabel.Font = Enum.Font.GothamBold;
+    this.inputHintLabel.TextColor3 = COLORS.muted;
+    this.inputHintLabel.TextSize = 11;
 
     this.createActionBar();
     this.createCraftPanel();
@@ -368,7 +382,7 @@ export class UiController {
     ) {
       this.tutorialStep = 0;
       this.renderTutorialStep();
-      this.tutorialOverlay.Visible = true;
+      this.setTutorialVisible(true);
     }
     this.lastMatchEndsAt = snapshot.match.matchEndsAt;
     const phaseName = this.localizer.text(PHASE_KEYS[snapshot.match.phase]);
@@ -444,8 +458,9 @@ export class UiController {
   }
 
   public toggleTutorial(): void {
-    this.tutorialOverlay.Visible = !this.tutorialOverlay.Visible;
-    if (this.tutorialOverlay.Visible) {
+    const visible = !this.tutorialOverlay.Visible;
+    this.setTutorialVisible(visible);
+    if (visible) {
       this.renderTutorialStep();
     }
   }
@@ -466,6 +481,7 @@ export class UiController {
     const layout = new Instance("UIListLayout");
     layout.FillDirection = Enum.FillDirection.Horizontal;
     layout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
+    layout.SortOrder = Enum.SortOrder.LayoutOrder;
     layout.Padding = new UDim(0, 8);
     layout.Parent = bar;
 
@@ -502,6 +518,7 @@ export class UiController {
 
     const layout = new Instance("UIListLayout");
     layout.Padding = new UDim(0, 7);
+    layout.SortOrder = Enum.SortOrder.LayoutOrder;
     layout.Parent = panel;
 
     this.craftTitle = textLabel(
@@ -559,6 +576,7 @@ export class UiController {
 
     const layout = new Instance("UIListLayout");
     layout.Padding = new UDim(0, 6);
+    layout.SortOrder = Enum.SortOrder.LayoutOrder;
     layout.Parent = panel;
 
     this.buildTitle = textLabel(
@@ -601,7 +619,7 @@ export class UiController {
     helpButton.ZIndex = 12;
     helpButton.Activated.Connect(() => {
       this.renderTutorialStep();
-      this.tutorialOverlay.Visible = true;
+      this.setTutorialVisible(true);
     });
 
     const overlay = this.tutorialOverlay;
@@ -653,8 +671,7 @@ export class UiController {
     this.tutorialCloseButton.Size = new UDim2(0, 38, 0, 38);
     this.tutorialCloseButton.TextSize = 24;
     this.tutorialCloseButton.ZIndex = 32;
-    this.tutorialCloseButton.Modal = true;
-    this.tutorialCloseButton.Activated.Connect(() => (overlay.Visible = false));
+    this.tutorialCloseButton.Activated.Connect(() => this.setTutorialVisible(false));
 
     this.configureTutorialLabel(
       this.tutorialStepLabel,
@@ -740,7 +757,7 @@ export class UiController {
     this.tutorialNextButton.TextColor3 = COLORS.background;
     this.tutorialNextButton.Activated.Connect(() => {
       if (this.tutorialStep >= TUTORIAL_STEPS.size() - 1) {
-        overlay.Visible = false;
+        this.setTutorialVisible(false);
         return;
       }
       this.tutorialStep += 1;
@@ -748,6 +765,7 @@ export class UiController {
     });
 
     this.renderTutorialStep();
+    this.setTutorialVisible(true);
   }
 
   private configureTutorialLabel(
@@ -783,7 +801,7 @@ export class UiController {
     result.TextColor3 = COLORS.text;
     result.TextSize = 13;
     result.ZIndex = 33;
-    result.Modal = true;
+    result.Modal = false;
     result.Parent = parent;
     addCorner(result, 7);
     addStroke(result);
@@ -803,8 +821,17 @@ export class UiController {
         : this.localizer.text("tutorial.next");
   }
 
+  private setTutorialVisible(visible: boolean): void {
+    this.tutorialOverlay.Visible = visible;
+    this.tutorialCloseButton.Modal = visible;
+    this.tutorialPreviousButton.Modal = visible;
+    this.tutorialNextButton.Modal = visible;
+    this.actions.tutorialVisibilityChanged(visible);
+  }
+
   private refreshLocalization(): void {
     this.inventoryTitle.Text = this.localizer.text("ui.inventory");
+    this.inputHintLabel.Text = this.localizer.text("ui.input_hint");
     this.mobileActionButton.Text = this.localizer.text("ui.action");
     this.craftTitle.Text = this.localizer.text("ui.crafting");
     this.buildTitle.Text = this.localizer.text("ui.building");
