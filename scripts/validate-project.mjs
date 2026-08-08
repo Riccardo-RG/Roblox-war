@@ -97,6 +97,16 @@ for (const securityMarker of [
   }
 }
 
+const profileStoreSource = await readFile(
+  path.join(root, "src/server/services/profile-store-service.ts"),
+  "utf8",
+);
+for (const fallbackMarker of ["pcall(() => DataStoreService.GetDataStore", "store === undefined"]) {
+  if (!profileStoreSource.includes(fallbackMarker)) {
+    throw new Error(`Studio profile fallback is missing guard: ${fallbackMarker}`);
+  }
+}
+
 const sourcemapText = await readFile(path.join(root, "build/sourcemap.json"), "utf8");
 for (const compiledService of [
   "building-service",

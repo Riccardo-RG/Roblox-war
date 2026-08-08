@@ -47,14 +47,28 @@ function sanitizeProfile(value: unknown): PersistentProfile {
 }
 
 export class ProfileStoreService {
-  private readonly store = DataStoreService.GetDataStore(PROFILE_STORE_NAME);
+  private readonly store: DataStore | undefined;
   private shuttingDown = false;
 
+  public constructor() {
+    const [success, result] = pcall(() => DataStoreService.GetDataStore(PROFILE_STORE_NAME));
+    if (success) {
+      this.store = result;
+    } else {
+      this.store = undefined;
+      warn("[ProfileStore] DataStore non disponibile: uso profili temporanei per questa sessione.");
+    }
+  }
+
   public load(player: Player): PersistentProfile {
+    const store = this.store;
+    if (store === undefined) {
+      return defaultProfile();
+    }
     const key = this.keyFor(player);
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       const [success, result] = pcall(() => {
-        const [value] = this.store.GetAsync(key);
+        const [value] = store.GetAsync(key);
         return value;
       });
       if (success) {
@@ -70,11 +84,15 @@ export class ProfileStoreService {
   }
 
   public save(player: Player, profile: PersistentProfile): boolean {
+    const store = this.store;
+    if (store === undefined) {
+      return false;
+    }
     profile.lastSavedAt = os.time();
     const payload = { ...profile };
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       const [success, result] = pcall(() => {
-        this.store.UpdateAsync(this.keyFor(player), () => $tuple(payload));
+        store.UpdateAsync(this.keyFor(player), () => $tuple(payload));
       });
       if (success) {
         return true;
