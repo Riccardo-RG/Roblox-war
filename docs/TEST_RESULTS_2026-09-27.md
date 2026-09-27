@@ -3,7 +3,7 @@
 ## Candidate identity
 
 - Repository: `Riccardo-RG/Roblox-war`.
-- Branch: `codex/release-ready`, based on historical source commit `b1986f7`.
+- Branch: `playtest/2026-09-27`, based on historical source commit `b1986f7`.
 - This record covers the integration checkpoint on 2026-09-27, not a tagged release.
 - Canonical source: the repository in `Documents/WAR WORLD`; the earlier Desktop checkout was preserved.
 - Node.js 24.19.0; Rojo CLI 7.6.1; Studio log version 0.740.19.7400003 on macOS.

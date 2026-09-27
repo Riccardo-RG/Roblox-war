@@ -22,7 +22,7 @@ These decisions are no longer awaiting approval. The project is not yet certifie
 The canonical runnable source is this repository in Documents/WAR WORLD. The earlier
 Desktop/worldwar history was imported and the Desktop copy is retained untouched as a historical
 reference. Source, build tooling and these documents now share one repository. The implementation
-branch is `codex/release-ready`; origin is `Riccardo-RG/Roblox-war`, initially empty. This is not a
+branch is `playtest/2026-09-27`; origin is `Riccardo-RG/Roblox-war`, initially empty. This is not a
 claim that a push or Roblox publication has occurred.
 
 The original read-only audit performed these checks against b1986f7:

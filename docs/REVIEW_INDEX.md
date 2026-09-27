@@ -25,7 +25,7 @@ reviewed baseline `b1986f7`; the Desktop checkout remains a historical reference
 - Work toward a verified release candidate, then push the source; publication remains a separate
   approval for the exact candidate.
 
-The active implementation branch is `codex/release-ready`. The configured origin is
+The active implementation branch is `playtest/2026-09-27`. The configured origin is
 `Riccardo-RG/Roblox-war`, initially empty; this document does not certify push or publication.
 
 ## Evidence boundary

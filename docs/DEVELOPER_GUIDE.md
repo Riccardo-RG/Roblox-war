@@ -11,7 +11,7 @@ The earlier Desktop/worldwar history was imported; its reviewed baseline is comm
 development folder. Source, build tooling and English documentation now live together here.
 
 Implementation of the audit corrections and the 20-minute/depot design was approved. The working
-branch is `codex/release-ready`; the configured origin is `Riccardo-RG/Roblox-war`, which was empty
+branch is `playtest/2026-09-27`; the configured origin is `Riccardo-RG/Roblox-war`, which was empty
 when selected. A configured remote is not evidence that a push has completed. A source push is
 also separate from publishing the Roblox experience.
 
