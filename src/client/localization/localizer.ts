@@ -4,57 +4,62 @@ import {
   type LocalizationArgs,
   type LocalizationKey,
   type LocalizedMessage,
-  sourceFor,
+  localTextFor,
 } from "shared/localization/translations";
 
+/** Local catalog is always ready; replicated translations are an optional enhancement. */
 export class Localizer {
   public readonly changed = new Instance("BindableEvent");
-  public readonly table: LocalizationTable;
-  private translator: Translator;
+  public table: LocalizationTable | undefined;
+  private translator: Translator | undefined;
 
   public constructor() {
-    const localizationTable = ReplicatedStorage.WaitForChild(LOCALIZATION_TABLE_NAME, 10);
-    assert(localizationTable?.IsA("LocalizationTable"), "War World localization table is missing.");
-    this.table = localizationTable;
-    this.translator = this.createTranslator();
-
+    this.attachTable(ReplicatedStorage.FindFirstChild(LOCALIZATION_TABLE_NAME));
+    ReplicatedStorage.ChildAdded.Connect((child) => this.attachTable(child));
     LocalizationService.GetPropertyChangedSignal("RobloxLocaleId").Connect(() => {
-      this.translator = this.createTranslator();
+      this.refreshTranslator();
       this.changed.Fire();
     });
   }
 
   public text(key: LocalizationKey, args?: LocalizationArgs): string {
-    const [success, result] = pcall(() => this.translator.FormatByKey(key, args ?? {}));
-    if (success && typeIs(result, "string")) {
-      return result;
+    const translator = this.translator;
+    if (translator !== undefined) {
+      const [success, result] = pcall(() => translator.FormatByKey(key, args ?? {}));
+      if (success && typeIs(result, "string")) return result;
     }
-    return this.fallback(key, args);
+    const source = localTextFor(key, LocalizationService.RobloxLocaleId);
+    const [formatted] = string.gsub(source, "{([%w_]+)}", (name: string) => {
+      const value = args?.[name];
+      return value !== undefined ? tostring(value) : `{${name}}`;
+    });
+    return formatted;
   }
 
   public message(message: LocalizedMessage): string {
     return this.text(message.key, message.args);
   }
 
-  private createTranslator(): Translator {
-    const [success, translator] = pcall(() =>
-      this.table.GetTranslator(LocalizationService.RobloxLocaleId),
-    );
-    if (success && typeIs(translator, "Instance") && translator.IsA("Translator")) {
-      return translator;
-    }
-    return this.table.GetTranslator("en-us");
+  private attachTable(instance: Instance | undefined): void {
+    if (
+      instance === undefined ||
+      instance.Name !== LOCALIZATION_TABLE_NAME ||
+      !instance.IsA("LocalizationTable")
+    )
+      return;
+    this.table = instance;
+    this.refreshTranslator();
+    this.changed.Fire();
   }
 
-  private fallback(key: LocalizationKey, args?: LocalizationArgs): string {
-    let result = sourceFor(key);
-    if (args === undefined) {
-      return result;
-    }
-    for (const [name, value] of pairs(args)) {
-      const [replaced] = string.gsub(result, `{${name}}`, tostring(value));
-      result = replaced;
-    }
-    return result;
+  private refreshTranslator(): void {
+    this.translator = undefined;
+    const localizationTable = this.table;
+    if (localizationTable === undefined) return;
+    const [success, translator] = pcall(() =>
+      localizationTable.GetTranslator(LocalizationService.RobloxLocaleId),
+    );
+    if (success && typeIs(translator, "Instance") && translator.IsA("Translator"))
+      this.translator = translator;
   }
 }

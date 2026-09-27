@@ -44,7 +44,7 @@ export function runCatalogSmokeTests(): void {
     productionDuration += phase.productionSeconds;
   }
   assert(MATCH_PHASES.size() === 4, "The vertical slice must contain four active match phases.");
-  assert(productionDuration === 35 * 60, "The production campaign must remain 35 minutes long.");
+  assert(productionDuration === 20 * 60, "The production match must remain 20 minutes long.");
 
   print("[WAR WORLD] Catalog smoke tests passed.");
 }

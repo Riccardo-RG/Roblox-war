@@ -6,7 +6,7 @@ build/
 *.rbxlx
 *.rbxm
 *.rbxmx
+!assets/original/world-kit/WorldArtLibrary.rbxmx
 *.tsbuildinfo
 .DS_Store
 npm-debug.log*
-

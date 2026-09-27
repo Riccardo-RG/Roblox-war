@@ -1,8 +1,10 @@
-import { Players } from "@rbxts/services";
+import { Debris, Players } from "@rbxts/services";
+import { MIN_MATCH_REWARD_PARTICIPATION_SECONDS } from "shared/catalog/match-config";
 import { isBuildPieceId } from "shared/catalog/build-pieces";
 import { isRecipeId } from "shared/catalog/recipes";
 import {
   localized,
+  sourceFor,
   type LocalizationKey,
   type LocalizedMessage,
 } from "shared/localization/translations";
@@ -12,6 +14,8 @@ import { BuildingService } from "server/services/building-service";
 import { CombatService } from "server/services/combat-service";
 import { CraftingService } from "server/services/crafting-service";
 import { ExtractionService } from "server/services/extraction-service";
+import { DepotService } from "server/services/depot-service";
+import { getCampPosition } from "server/world/world-layout";
 import { LootService } from "server/services/loot-service";
 import { MatchService } from "server/services/match-service";
 import { NetworkService } from "server/services/network-service";
@@ -27,9 +31,14 @@ import { WorldEventService } from "server/services/world-event-service";
 import { runCatalogSmokeTests } from "server/tests/catalog-smoke-tests";
 import { installLocalizationTable } from "server/localization/install-localization";
 
+// Hold character creation until world generation and profile ownership are ready.
+Players.CharacterAutoLoads = false;
+
 class WarWorldServer {
   private readonly network = new NetworkService();
-  private readonly profiles = new ProfileStoreService();
+  private readonly profiles = new ProfileStoreService((player) =>
+    this.kickForProfile(player, "error.profile_session"),
+  );
   private readonly playerState = new PlayerStateService();
   private readonly teams = new TeamService();
   private readonly match = new MatchService();
@@ -41,10 +50,16 @@ class WarWorldServer {
   private readonly npcs: NpcService;
   private readonly combat: CombatService;
   private readonly extraction: ExtractionService;
+  private readonly depots: DepotService;
   private readonly worldEvents: WorldEventService;
   private readonly commandRateLimiter = new RateLimiter();
   private readonly reconnect = new ReconnectService();
   private previousPhase: MatchPhase = "Scavenge";
+  private readonly joining = new Set<Player>();
+  private readonly characterConnections = new Map<Player, RBXScriptConnection>();
+  private readonly deathConnections = new Map<Player, RBXScriptConnection>();
+  private readonly pendingSnapshots = new Set<Player>();
+  private shuttingDown = false;
 
   public constructor(private readonly localizationTable: LocalizationTable) {
     this.teams.initialize();
@@ -52,7 +67,11 @@ class WarWorldServer {
 
     const infoToast = (player: Player, message: LocalizedMessage) =>
       this.toast(player, message, "Info");
-    this.resources = new ResourceService(this.playerState, infoToast);
+    this.resources = new ResourceService(
+      this.playerState,
+      infoToast,
+      () => this.match.currentPhase() !== "Complete",
+    );
     this.crafting = new CraftingService(this.playerState, infoToast);
     this.building = new BuildingService(
       this.playerState,
@@ -64,8 +83,8 @@ class WarWorldServer {
     this.loot = new LootService(this.playerState, this.teams, infoToast, this.localizationTable);
     this.npcs = new NpcService(
       (player) => {
-        this.playerState.awardProgress(player, 25, 5);
-        this.teams.addScore(player, 10);
+        this.playerState.awardProgress(player, 10, 1);
+        this.teams.addScore(player, 2);
         this.toast(player, localized("toast.drone_neutralized"), "Success");
       },
       (player) => this.playerState.get(player)?.isSpectator === false,
@@ -76,29 +95,59 @@ class WarWorldServer {
       this.match,
       this.npcs,
       (player, eliminated) => this.network.send(player, { kind: "HitConfirm", eliminated }),
-      (player, origin, endpoint) =>
-        this.network.sendAll({
-          kind: "ShotEffect",
-          origin,
-          endpoint,
-          shooterUserId: player.UserId,
-        }),
+      (player, origin, endpoint) => {
+        for (const recipient of Players.GetPlayers()) {
+          const root = recipient.Character?.FindFirstChild("HumanoidRootPart");
+          if (
+            recipient === player ||
+            (root?.IsA("BasePart") &&
+              math.min(
+                root.Position.sub(origin).Magnitude,
+                root.Position.sub(endpoint).Magnitude,
+              ) <= 230)
+          ) {
+            this.network.send(recipient, {
+              kind: "ShotEffect",
+              origin,
+              endpoint,
+              shooterUserId: player.UserId,
+            });
+          }
+        }
+      },
       infoToast,
     );
-    this.extraction = new ExtractionService(this.playerState, this.match, this.teams, infoToast);
+    this.extraction = new ExtractionService(
+      this.playerState,
+      this.match,
+      this.teams,
+      infoToast,
+      (player) => this.queueSnapshot(player),
+    );
+    this.depots = new DepotService(
+      this.playerState,
+      this.teams,
+      this.match,
+      infoToast,
+      () => {
+        for (const player of Players.GetPlayers()) this.queueSnapshot(player);
+      },
+      this.localizationTable,
+    );
     this.worldEvents = new WorldEventService((message) => this.broadcastToast(message, "Warning"));
   }
 
   public start(): void {
+    Players.CharacterAutoLoads = false;
     runCatalogSmokeTests();
     this.playerState.changed.Event.Connect((value: unknown) => {
       if (typeIs(value, "Instance") && value.IsA("Player")) {
-        this.sendSnapshot(value);
+        this.queueSnapshot(value);
       }
     });
     this.teams.changed.Event.Connect(() => {
       for (const player of Players.GetPlayers()) {
-        this.sendSnapshot(player);
+        this.queueSnapshot(player);
       }
     });
 
@@ -109,6 +158,7 @@ class WarWorldServer {
     );
     this.npcs.start();
     this.extraction.start();
+    this.depots.start();
     this.reconnect.startCleanup();
 
     Players.PlayerAdded.Connect((player) => task.spawn(() => this.onPlayerAdded(player)));
@@ -123,6 +173,7 @@ class WarWorldServer {
     );
 
     game.BindToClose(() => {
+      this.shuttingDown = true;
       this.profiles.beginShutdown();
       this.npcs.stop();
       let pendingSaves = 0;
@@ -131,36 +182,61 @@ class WarWorldServer {
         if (profile !== undefined) {
           pendingSaves += 1;
           task.spawn(() => {
-            this.profiles.save(player, profile);
+            this.profiles.release(player, profile);
             pendingSaves -= 1;
           });
         }
       }
       const deadline = os.clock() + 25;
-      while (pendingSaves > 0 && os.clock() < deadline) {
+      while (
+        (pendingSaves > 0 || this.profiles.hasPendingOperations() || !this.joining.isEmpty()) &&
+        os.clock() < deadline
+      ) {
         task.wait(0.1);
       }
     });
 
-    print("[WAR WORLD] Server vertical slice started.");
+    print("[WAR WORLD] Release-candidate server started; runtime validation is required.");
   }
 
   private onPlayerAdded(player: Player): void {
-    if (this.playerState.get(player) !== undefined) {
+    if (
+      this.shuttingDown ||
+      this.playerState.get(player) !== undefined ||
+      this.joining.has(player)
+    ) {
       return;
     }
-
+    this.joining.add(player);
+    const profile = this.profiles.load(player);
+    this.joining.delete(player);
+    if (profile === undefined) {
+      if (player.Parent)
+        this.kickForProfile(
+          player,
+          this.profiles.getLoadFailure(player) === "SessionInUse"
+            ? "error.profile_locked"
+            : "error.profile_load",
+        );
+      this.profiles.forgetFailedLoad(player);
+      return;
+    }
+    if (!player.Parent || this.shuttingDown) {
+      this.profiles.release(player, profile);
+      return;
+    }
     const reconnect = this.reconnect.take(player.UserId);
     if (reconnect !== undefined) {
       const assignedTeam = this.teams.assignNamed(player, reconnect.teamName);
-      const restoredState = this.playerState.restoreFromReconnect(player, reconnect.state);
+      const restoredState = this.playerState.restoreFromReconnect(player, {
+        ...reconnect.state,
+        profile,
+      });
       if (assignedTeam === undefined) {
         restoredState.isSpectator = true;
       }
-      player.CharacterAdded.Connect((character) => this.configureCharacter(player, character));
-      if (player.Character !== undefined) {
-        this.configureCharacter(player, player.Character);
-      }
+      this.playerState.setBuildCount(player, this.building.countBuilds(player.UserId));
+      this.bindCharacter(player);
       if (assignedTeam === undefined) {
         this.toast(player, localized("toast.reconnect_teams_full"), "Warning");
       } else if (assignedTeam.Name !== reconnect.teamName) {
@@ -177,11 +253,6 @@ class WarWorldServer {
     }
 
     const assignedTeam = this.teams.assign(player);
-    const profile = this.profiles.load(player);
-    if (!player.Parent) {
-      return;
-    }
-
     const isSpectator = assignedTeam === undefined || !this.match.canBackfill();
     this.playerState.initialize(
       player,
@@ -190,16 +261,15 @@ class WarWorldServer {
       isSpectator,
     );
 
-    player.CharacterAdded.Connect((character) => this.configureCharacter(player, character));
-    if (player.Character !== undefined) {
-      this.configureCharacter(player, player.Character);
-    }
+    if (!isSpectator && this.match.currentPhase() !== "Scavenge")
+      this.playerState.add(player, "survival_blaster", 1);
+    this.bindCharacter(player);
 
     if (assignedTeam === undefined) {
       this.toast(player, localized("toast.teams_full"), "Warning");
     } else if (isSpectator) {
       this.toast(player, localized("toast.late_spectator"), "Warning");
-    } else if (this.match.currentPhase() === "Conflict") {
+    } else if (this.match.currentPhase() !== "Scavenge") {
       this.toast(player, localized("toast.backfill"), "Success");
     } else {
       this.toast(player, localized("toast.welcome"), "Info");
@@ -213,16 +283,34 @@ class WarWorldServer {
       const reconnectState = this.playerState.captureForReconnect(player);
       if (reconnectState !== undefined) {
         this.reconnect.remember(player.UserId, this.teams.nameFor(player), reconnectState);
+        this.teams.reserve(player, 180);
       }
-      this.profiles.save(player, state.profile);
     }
     this.resources.removePlayer(player);
     this.crafting.removePlayer(player);
     this.building.removePlayer(player);
     this.combat.removePlayer(player);
     this.extraction.removePlayer(player);
+    this.depots.removePlayer(player);
+    this.characterConnections.get(player)?.Disconnect();
+    this.deathConnections.get(player)?.Disconnect();
+    this.characterConnections.delete(player);
+    this.deathConnections.delete(player);
+    this.pendingSnapshots.delete(player);
     this.commandRateLimiter.removePlayer(player);
     this.playerState.remove(player);
+    if (state !== undefined) this.profiles.release(player, state.profile);
+  }
+
+  private bindCharacter(player: Player): void {
+    this.characterConnections.get(player)?.Disconnect();
+    this.characterConnections.set(
+      player,
+      player.CharacterAdded.Connect((character) => this.configureCharacter(player, character)),
+    );
+    task.spawn(() => {
+      if (player.Parent && !this.shuttingDown) player.LoadCharacter();
+    });
   }
 
   private configureCharacter(player: Player, character: Model): void {
@@ -231,11 +319,17 @@ class WarWorldServer {
       const humanoidInstance = character.WaitForChild("Humanoid", 10);
       const root = character.WaitForChild("HumanoidRootPart", 10);
       const humanoid = humanoidInstance?.IsA("Humanoid") ? humanoidInstance : undefined;
+      if (!player.Parent || player.Character !== character) return;
+      if (root?.IsA("BasePart")) {
+        const teamIndex = math.max(0, this.teams.all().indexOf(player.Team!));
+        character.PivotTo(
+          new CFrame(getCampPosition(teamIndex, this.teams.all().size()).add(new Vector3(0, 6, 0))),
+        );
+        root.Anchored = false;
+      }
       if (state?.isSpectator && humanoid !== undefined && root?.IsA("BasePart")) {
-        root.CFrame = new CFrame(0, 85, 0);
-        root.Anchored = true;
-        humanoid.WalkSpeed = 0;
-        humanoid.AutoRotate = false;
+        humanoid.WalkSpeed = 18;
+        humanoid.AutoRotate = true;
       }
       if (
         humanoid !== undefined &&
@@ -243,13 +337,25 @@ class WarWorldServer {
         character.GetAttribute("EliminationHooked") !== true
       ) {
         character.SetAttribute("EliminationHooked", true);
-        humanoid.Died.Connect(() => {
-          const latestState = this.playerState.get(player);
-          if (latestState !== undefined && !latestState.isSpectator) {
-            this.loot.dropFromElimination(player, root.Position);
-            this.toast(player, localized("toast.eliminated_drop"), "Warning");
-          }
-        });
+        const shield = new Instance("ForceField");
+        shield.Visible = false;
+        shield.Parent = character;
+        Debris.AddItem(shield, 3);
+        this.deathConnections.get(player)?.Disconnect();
+        this.deathConnections.set(
+          player,
+          humanoid.Died.Connect(() => {
+            const latestState = this.playerState.get(player);
+            if (latestState !== undefined && !latestState.isSpectator) {
+              this.loot.dropFromElimination(player, root.Position);
+              this.toast(player, localized("toast.eliminated_drop"), "Warning");
+            }
+            task.delay(4, () => {
+              if (player.Parent && !this.shuttingDown && player.Character === character)
+                player.LoadCharacter();
+            });
+          }),
+        );
       }
     });
   }
@@ -335,13 +441,18 @@ class WarWorldServer {
       this.loot.resetAll();
       this.resources.resetAll();
       this.npcs.resetAll();
+      this.depots.resetAll();
       this.teams.resetScores();
       for (const player of Players.GetPlayers()) {
+        // An in-flight profile load owns initialization and the first character spawn.
+        if (this.playerState.get(player) === undefined) continue;
         if (player.Team === undefined) {
           this.teams.assign(player);
         }
         this.playerState.resetForMatch(player, 1, player.Team === undefined);
-        player.LoadCharacter();
+        task.spawn(() => {
+          if (player.Parent && !this.shuttingDown) player.LoadCharacter();
+        });
       }
     }
     this.previousPhase = current;
@@ -367,7 +478,11 @@ class WarWorldServer {
   private onMatchCompleted(): void {
     for (const player of Players.GetPlayers()) {
       const state = this.playerState.get(player);
-      if (state === undefined || state.isSpectator) {
+      if (
+        state === undefined ||
+        state.isSpectator ||
+        os.clock() - state.joinedAt < MIN_MATCH_REWARD_PARTICIPATION_SECONDS
+      ) {
         continue;
       }
       this.playerState.recordMatchCompleted(player);
@@ -410,6 +525,10 @@ class WarWorldServer {
       isSpectator: state.isSpectator,
       match: this.match.snapshot(),
       teamScores: this.teams.scoreSnapshot(),
+      buildCount: state.buildPartCount,
+      progress: { ...state.progress },
+      teamDepot: this.depots.snapshot(player),
+      extractionProgress: this.extraction.progressFor(player),
     };
   }
 
@@ -418,6 +537,22 @@ class WarWorldServer {
     if (snapshot !== undefined && player.Parent) {
       this.network.send(player, { kind: "Snapshot", snapshot });
     }
+  }
+
+  private queueSnapshot(player: Player): void {
+    if (this.pendingSnapshots.has(player)) return;
+    this.pendingSnapshots.add(player);
+    task.defer(() => {
+      this.pendingSnapshots.delete(player);
+      if (player.Parent) this.sendSnapshot(player);
+    });
+  }
+
+  private kickForProfile(player: Player, key: LocalizationKey): void {
+    const [success, message] = pcall(() =>
+      this.localizationTable.GetTranslator(player.LocaleId).FormatByKey(key, {}),
+    );
+    player.Kick(success && typeIs(message, "string") ? message : sourceFor(key));
   }
 
   private toast(player: Player, message: LocalizedMessage, tone: ToastTone): void {

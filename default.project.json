@@ -24,6 +24,12 @@
         "$path": "out/server"
       }
     },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "WorldArtLibrary": {
+        "$path": "assets/original/world-kit/WorldArtLibrary.rbxmx"
+      }
+    },
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "$properties": {

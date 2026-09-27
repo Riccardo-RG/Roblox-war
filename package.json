@@ -14,7 +14,9 @@
     "rojo:sourcemap": "mkdir -p build && rojo sourcemap default.project.json --output build/sourcemap.json",
     "validate": "node scripts/validate-project.mjs",
     "validate:localization": "node scripts/validate-localization.mjs",
-    "check": "npm run typecheck && npm run format:check && npm run validate:localization && npm run rojo:sourcemap && npm run validate && npm run rojo:build"
+    "validate:art": "node scripts/validate-original-world-kit.mjs",
+    "test:server": "node scripts/test-server-policies.mjs",
+    "check": "npm run typecheck && npm run format:check && npm run validate:localization && npm run validate:art && npm run test:server && npm run rojo:sourcemap && npm run validate && npm run rojo:build"
   },
   "devDependencies": {
     "@rbxts/compiler-types": "3.0.0-types.0",

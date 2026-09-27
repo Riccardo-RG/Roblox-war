@@ -15,6 +15,7 @@ export class TeamService {
   public readonly changed = new Instance("BindableEvent");
   private readonly managedTeams = new Array<Team>();
   private readonly scores = new Map<string, number>();
+  private readonly reservations = new Map<number, { teamName: string; until: number }>();
 
   public initialize(): void {
     for (const definition of TEAM_DEFINITIONS) {
@@ -34,14 +35,28 @@ export class TeamService {
   public assign(player: Player): Team | undefined {
     let selected: Team | undefined;
     for (const team of this.managedTeams) {
-      if (team.GetPlayers().size() >= MAX_SQUAD_SIZE) {
+      if (this.occupancy(team, player.UserId) >= MAX_SQUAD_SIZE) {
         continue;
       }
-      if (selected === undefined || team.GetPlayers().size() < selected.GetPlayers().size()) {
+      if (
+        selected === undefined ||
+        this.occupancy(team, player.UserId) < this.occupancy(selected, player.UserId)
+      ) {
         selected = team;
       }
     }
 
+    // A soft reconnect reservation must not strand a new arrival in spectator mode.
+    // Preserve reservations when capacity allows, otherwise use a genuinely vacant seat.
+    if (selected === undefined) {
+      for (const team of this.managedTeams) {
+        if (
+          team.GetPlayers().size() < MAX_SQUAD_SIZE &&
+          (selected === undefined || team.GetPlayers().size() < selected.GetPlayers().size())
+        )
+          selected = team;
+      }
+    }
     if (selected === undefined) {
       player.Team = undefined;
       player.Neutral = true;
@@ -49,20 +64,20 @@ export class TeamService {
     }
     player.Team = selected;
     player.Neutral = false;
+    this.reservations.delete(player.UserId);
     return selected;
   }
 
   public assignNamed(player: Player, teamName: string): Team | undefined {
     const requested = this.managedTeams.find((team) => team.Name === teamName);
     if (requested !== undefined) {
-      if (requested.GetPlayers().size() < MAX_SQUAD_SIZE) {
+      if (this.occupancy(requested, player.UserId) < MAX_SQUAD_SIZE) {
         player.Team = requested;
         player.Neutral = false;
+        this.reservations.delete(player.UserId);
         return requested;
       }
-      player.Team = undefined;
-      player.Neutral = true;
-      return undefined;
+      return this.assign(player);
     }
     return this.assign(player);
   }
@@ -102,9 +117,38 @@ export class TeamService {
   }
 
   public resetScores(): void {
+    this.reservations.clear();
     for (const team of this.managedTeams) {
       this.scores.set(team.Name, 0);
     }
     this.changed.Fire();
+  }
+
+  public reserve(player: Player, seconds: number): void {
+    if (player.Team !== undefined)
+      this.reservations.set(player.UserId, {
+        teamName: player.Team.Name,
+        until: os.clock() + seconds,
+      });
+  }
+
+  private occupancy(team: Team, joiningUserId: number): number {
+    let count = team
+      .GetPlayers()
+      .filter((player) => player.UserId !== joiningUserId)
+      .size();
+    for (const [userId, reservation] of this.reservations) {
+      if (reservation.until <= os.clock()) {
+        this.reservations.delete(userId);
+        continue;
+      }
+      if (
+        userId !== joiningUserId &&
+        reservation.teamName === team.Name &&
+        !team.GetPlayers().some((player) => player.UserId === userId)
+      )
+        count += 1;
+    }
+    return count;
   }
 }

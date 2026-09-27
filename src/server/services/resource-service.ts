@@ -1,21 +1,25 @@
 import { CollectionService, Workspace } from "@rbxts/services";
 import { isItemId } from "shared/catalog/items";
 import { localized, type LocalizedMessage } from "shared/localization/translations";
-import { horizontalDistance } from "shared/util/math";
+import { isWithinActionRange } from "shared/util/combat-policy";
+import { isFiniteVector3 } from "shared/util/math";
 import { PlayerStateService } from "server/services/player-state-service";
 import { RateLimiter } from "server/services/rate-limiter";
 
 export class ResourceService {
   private readonly rateLimiter = new RateLimiter();
+  private respawnGeneration = 0;
 
   public constructor(
     private readonly playerState: PlayerStateService,
     private readonly toast: (player: Player, message: LocalizedMessage) => void,
+    private readonly canAct: () => boolean = () =>
+      Workspace.GetAttribute("MatchPhase") !== "Complete",
   ) {}
 
   public harvest(player: Player, target: Instance): void {
     const state = this.playerState.get(player);
-    if (state === undefined || state.isSpectator || !target.IsA("BasePart")) {
+    if (state === undefined || state.isSpectator || !this.canAct() || !target.IsA("BasePart")) {
       return;
     }
     if (!target.IsDescendantOf(Workspace) || !CollectionService.HasTag(target, "ResourceNode")) {
@@ -26,7 +30,32 @@ export class ResourceService {
     }
 
     const root = player.Character?.FindFirstChild("HumanoidRootPart");
-    if (!root?.IsA("BasePart") || horizontalDistance(root.Position, target.Position) > 16) {
+    const head = player.Character?.FindFirstChild("Head");
+    const humanoid = player.Character?.FindFirstChildOfClass("Humanoid");
+    if (
+      !root?.IsA("BasePart") ||
+      !head?.IsA("BasePart") ||
+      !isFiniteVector3(head.Position) ||
+      humanoid === undefined ||
+      humanoid.Health <= 0 ||
+      !isWithinActionRange(root.Position.sub(target.Position).Magnitude, 16)
+    ) {
+      return;
+    }
+    const raycastParams = new RaycastParams();
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude;
+    raycastParams.FilterDescendantsInstances =
+      player.Character !== undefined ? [player.Character] : [];
+    const obstruction = Workspace.Raycast(
+      head.Position,
+      target.Position.sub(head.Position),
+      raycastParams,
+    );
+    if (
+      obstruction !== undefined &&
+      obstruction.Instance !== target &&
+      !obstruction.Instance.IsDescendantOf(target)
+    ) {
       return;
     }
 
@@ -45,6 +74,7 @@ export class ResourceService {
       this.toast(player, localized("toast.inventory_full"));
       return;
     }
+    this.playerState.recordAction(player, "harvested", accepted);
 
     const nextRemaining = math.max(0, remaining - 20);
     target.SetAttribute("Remaining", nextRemaining);
@@ -58,6 +88,7 @@ export class ResourceService {
   }
 
   public resetAll(): void {
+    this.respawnGeneration += 1;
     for (const instance of CollectionService.GetTagged("ResourceNode")) {
       if (!instance.IsA("BasePart") || !instance.IsDescendantOf(Workspace)) {
         continue;
@@ -74,9 +105,10 @@ export class ResourceService {
     const maximum = node.GetAttribute("MaximumRemaining");
     const delaySeconds = typeIs(respawnSeconds, "number") ? respawnSeconds : 25;
     const maximumRemaining = typeIs(maximum, "number") ? maximum : 60;
+    const generation = this.respawnGeneration;
 
     task.delay(delaySeconds, () => {
-      if (!node.Parent) {
+      if (!node.Parent || generation !== this.respawnGeneration) {
         return;
       }
       node.SetAttribute("Remaining", maximumRemaining);

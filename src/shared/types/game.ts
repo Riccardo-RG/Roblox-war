@@ -35,6 +35,24 @@ export interface PlayerSnapshot {
   readonly isSpectator: boolean;
   readonly match: MatchSnapshot;
   readonly teamScores: ReadonlyArray<TeamScore>;
+  readonly buildCount?: number;
+  readonly progress?: TutorialProgress;
+  readonly teamDepot?: TeamDepotSnapshot;
+  readonly extractionProgress?: number;
+}
+
+export interface TutorialProgress {
+  harvested: number;
+  crafted: number;
+  built: number;
+  deposited: number;
+  extracted: number;
+}
+
+export interface TeamDepotSnapshot {
+  readonly storedCores: number;
+  readonly capacity: number;
+  readonly position: Vector3;
 }
 
 export interface PersistentProfile {

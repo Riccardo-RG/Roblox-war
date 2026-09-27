@@ -1,44 +1,54 @@
-# Localizzazione di WAR WORLD
+# Localization
 
-La build usa l'inglese (`en-us`) come lingua sorgente e include traduzioni manuali per:
+English (en-us) is the source language. The catalog also contains Italian (it-it), Spanish
+(es-es), Brazilian Portuguese (pt-br), French (fr-fr) and German (de-de).
 
-- italiano (`it-it`)
-- spagnolo (`es-es`)
-- portoghese brasiliano (`pt-br`)
-- francese (`fr-fr`)
-- tedesco (`de-de`)
+Player-facing text belongs in [the shared catalog](../src/shared/localization/translations.ts),
+including HUD labels, tutorial instructions, recipes, building names, objectives, server
+messages and interaction prompts. Team proper names and WAR WORLD remain unchanged.
 
-HUD, tutorial, nomi degli oggetti, obiettivi, messaggi del server e prompt nel mondo usano la
-stessa `LocalizationTable`. Il client sceglie automaticamente la lingua Roblox del giocatore e
-si aggiorna se la lingua cambia. Se una traduzione non è disponibile, viene mostrato l'inglese.
+## Implementation
 
-## Dove modificare i testi
+Server messages carry a typed localization key and formatting arguments. The client chooses its
+Roblox locale and formats the message. The local catalog is available immediately, so missing or
+delayed replication of the LocalizationTable must not prevent the interface from opening.
+A replicated translator is used when available; the catalog supplies the fallback. Unsupported
+locales fall back to English. Locale changes refresh visible text.
 
-Tutte le frasi rivolte al giocatore si trovano in
-`src/shared/localization/translations.ts`. Non aggiungere testi direttamente nei controller o nei
-servizi: aggiungi una chiave alla tabella e usa `localized(...)` sul server oppure `Localizer` sul
-client.
+World ProximityPrompts use English source strings, AutoLocalize and the shared localization
+table. Keep source strings stable and avoid constructing untranslated dynamic sentences directly
+inside a service. Technical diagnostics may remain English in Output; player-visible failures
+must use the catalog whenever the normal localization path is available.
 
-Le traduzioni manuali hanno la precedenza sulle traduzioni automatiche Roblox. Prima della
-pubblicazione definitiva, italiano, spagnolo, portoghese, francese e tedesco devono comunque
-essere riletti da madrelingua nel contesto del gioco: la correttezza grammaticale da sola non
-garantisce che un pulsante corto o un termine di gameplay sia naturale.
+## Adding or changing text
 
-## Controllo prima del test
+1. Add a typed key with values for all six languages.
+2. Keep placeholders consistent across translations and pass arguments explicitly.
+3. Update the relevant tutorial/control text when a key binding or gameplay rule changes.
+4. Run the localization validator and build checks.
+5. Inspect the result in the actual UI, including a long-text language on the smallest layout.
+6. Have a fluent speaker review meaning and terminology in gameplay context.
 
-1. Esegui `npm run check`: la build verifica chiavi duplicate e valori mancanti per tutte le sei
-   lingue.
-2. Apri la build in Studio e completa almeno un ciclo in italiano e in inglese.
-3. Cambia la lingua dell'account Roblox di prova, riavvia la sessione e controlla tutorial, HUD,
-   crafting, porte, casse e messaggi delle fasi.
-4. Verifica che i testi lunghi non escano dai pannelli a 1280×720 e su un dispositivo mobile
-   emulato.
-5. Fai controllare le altre quattro lingue a giocatori madrelingua prima di attivare acquisti o
-   campagne pubblicitarie.
+```sh
+npm run validate:localization
+npm run check
+```
 
-## Pubblicazione
+The number of keys changes as features are added; use the validator's current output rather than
+an old fixed count. Validation checks completeness and placeholders, not idiomatic translation,
+cultural suitability, line wrapping or whether the instructions match the playable experience.
 
-Nel Creator Dashboard imposta l'inglese come lingua sorgente dell'esperienza e abilita le lingue
-supportate. La tabella inclusa nel progetto garantisce il comportamento della build; il portale
-Roblox rimane utile per statistiche linguistiche, traduttori collaboratori e contenuti esterni al
-place, come nome e descrizione dell'esperienza.
+## Required language checks
+
+- Play at least one full Studio round in English and Italian.
+- Inspect Spanish, Portuguese, French and German for contextual accuracy before public release.
+- Check tutorial pages, recipe costs, depot instructions, extraction progress, resource feedback,
+  connection errors and every world prompt.
+- Verify fallback with a locale outside the catalog and while the replicated table is delayed.
+- Change locale during a session where the platform allows it and inspect already-open panels.
+- Test 1280×720 desktop, small mobile landscape, device safe areas and console viewing distance.
+- Ensure technical keys or unfilled placeholders never appear to players.
+
+Technical documentation is maintained in English even though the game itself supports six
+languages. The experience's public title/description and Creator Dashboard language settings
+also require review; local catalog validation does not configure or certify those external fields.

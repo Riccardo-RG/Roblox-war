@@ -1,66 +1,92 @@
-# Design del vertical slice WAR WORLD
+# Game design
 
-## Promessa del prodotto
+## Product promise
 
-Costruisci una base, contendi eventi pericolosi, apri le difese rivali ed estrai Nuclei energetici
-in un arco survival completo da 35 minuti.
+Build and defend a team outpost, steal exposed energy cores, then extract them during a compact
+first-person PvPvE round. WAR WORLD combines readable blaster combat with a small survival loop;
+it does not aim to reproduce Rust's graphic violence or persistent, week-long grind.
 
-## Pilastri
+The target look is readable stylized realism: believable terrain, materials and silhouettes,
+with restrained effects and clear objective colors. Darkness, bloom and visual clutter must not
+make targets or resource types difficult to identify. PC, mobile and console are intended launch
+platforms; support is not signed off until their controls and performance pass real-device tests.
 
-1. **Survival rapido**: prima risorsa in pochi secondi, primo riparo in pochi minuti.
-2. **Conflitto leggibile**: effetti stilizzati, armi prevedibili e nessuna violenza grafica.
-3. **Costruzione significativa**: le basi creano scelte tattiche senza ore di grind.
-4. **Perdita equa**: le risorse trasportate sono a rischio; progressi account e cosmetici restano.
-5. **Sociale di base**: squadre da massimo quattro e fuoco amico disattivato.
+## Round structure
 
-## Fasi della partita
+| Phase      | Public duration | Studio duration | Main decisions                                                  |
+| ---------- | --------------: | --------------: | --------------------------------------------------------------- |
+| Scavenge   |       4 minutes |      90 seconds | Gather, craft a blaster, establish defenses and bank cores.     |
+| Conflict   |       6 minutes |      90 seconds | Contest resource routes and public events; PvP is enabled.      |
+| Raid       |       6 minutes |      90 seconds | Breach rival defenses and steal from exposed depots.            |
+| Extraction |       4 minutes |      60 seconds | Withdraw cores, reach the center and defend an extraction hold. |
 
-| Fase       | Durata pubblica | Scopo                                                   |
-| ---------- | --------------: | ------------------------------------------------------- |
-| Raccolta   |           8 min | Raccogli, crea oggetti e costruisci il campo iniziale.  |
-| Conflitto  |          12 min | Si attivano PvP ed eventi pubblici.                     |
-| Raid       |          10 min | Le Cariche possono danneggiare le costruzioni rivali.   |
-| Estrazione |           5 min | Consegna i Nuclei e assicurati il punteggio conclusivo. |
+A public round lasts 20 minutes, followed by a 15-second intermission. Studio runs 5 minutes
+30 seconds plus intermission. These values are a balance hypothesis, not evidence that the pace
+is already enjoyable. Record first resource, first crafted item, first fight and idle time in tests.
 
-Studio usa durate ridotte per consentire prove pratiche.
+New players can enter in every active phase with the applicable catch-up loadout. Players must
+not spend most of a round immobilized merely because they joined late. Team size is four, across
+six teams; a full server remains a capacity constraint. Reconnecting within three minutes to the
+same server restores round state when possible. Automatic routing back to that server is not
+implemented as a production matchmaking guarantee.
 
-## Regole di backfill
+## Why build a base?
 
-- I giocatori possono entrare liberamente durante Raccolta.
-- Nella prima metà del Conflitto ricevono un kit di recupero proporzionato.
-- Raid ed Estrazione accettano soltanto riconnessioni nell'architettura di produzione.
-- Nel vertical slice, i nuovi ingressi tardivi diventano spettatori.
-- La riconnessione entro tre minuti nello stesso server ripristina squadra, inventario e match.
-- In produzione la stessa informazione andrà replicata con MemoryStore e server riservati.
+A shared energy depot gives each camp something tangible to defend. Each depot stores up to
+24 cores; an individual carries at most three cores. A teammate deposits carried cores with
+a one-second interaction before Extraction.
+During Extraction, the same friendly interaction withdraws up to three cores per trip.
 
-## Eventi pubblici
+During Raid and Extraction, a rival can attempt a six-second steal. Each successful steal takes
+up to two cores, leaving one protected reserve core in the depot. Moving away, losing visibility,
+taking damage or being eliminated interrupts access. Cores are transferred, not duplicated.
 
-- Conflitto genera una Cassa di Rottami visibile e ne annuncia le coordinate.
-- Raid genera un Nucleo instabile sotto un alto fascio luminoso.
-- Estrazione converte i Nuclei portati nell'anello centrale in XP, crediti e punti squadra.
+Walls, foundations, team doors and workbenches support this loop. Limits are 36 existing
+structures per player, 120 per team and 480 per server. Spawn, depot access, extraction and
+monument clearances prevent critical paths from being sealed. Destroying a structure frees its
+budget; the cap is not a lifetime construction counter.
 
-Gli eventi spingono le squadre fuori dalle rotte isolate e creano scontri prevedibili senza usare
-un cerchio da battle royale.
+## Extraction, scoring and loss
 
-## Punteggio e perdita
+Extraction requires eight uninterrupted seconds inside the valid zone while alive and undamaged.
+Leaving the zone or taking damage resets progress. Each extracted core leaves the inventory and
+grants 100 team points, 100 XP and 25 credits. The successful-extractions profile counter increases
+at most once per round, even if a player completes several deliveries.
 
-| Azione                 | Punti squadra |
-| ---------------------- | ------------: |
-| Neutralizzare un drone |            10 |
-| Disattivare un rivale  |            25 |
-| Estrarre un Nucleo     |           100 |
+| Action             | Team points |  XP | Credits |
+| ------------------ | ----------: | --: | ------: |
+| Neutralize a drone |           2 |  10 |       1 |
+| Eliminate a rival  |          10 |  20 |       4 |
+| Extract a core     |         100 | 100 |      25 |
 
-Vince la squadra con il punteggio più alto. Alla disattivazione il giocatore conserva strumenti
-e Blaster, ma lascia tutti i Nuclei e metà delle risorse e consumabili. La squadra riceve sette
-secondi di priorità sulla Cassa prima che possano aprirla i rivali. Il rischio è significativo,
-ma non cancella progressione account e non forza una ripartenza completa.
+Extraction is deliberately the main scoring objective. Killing respawning NPCs should support
+resource control, not replace the objective. Equal top scores produce a tie. Account rewards
+must not be farmed through repeated corpse hits, failed save recovery or idle round completion.
 
-Gli Ingressi usano una porta energetica scorrevole. I membri della squadra proprietaria possono
-azionarla con il prompt nativo Roblox, compatibile con tastiera, controller e touch. I rivali
-devono distruggere la struttura durante Raid o Estrazione.
+Eliminated players retain their basic tool and crafted blaster. They drop all carried cores and
+half their resources/consumables in a recovery cache. Their team has seven seconds of priority
+before rivals may collect it. Account progression survives a round reset; current-round supplies
+and player-built defenses do not.
 
-## Confini dell'MVP
+## First-time experience
 
-Il vertical slice esclude intenzionalmente veicoli, agricoltura, reti elettriche, terreno
-procedurale, trading, clan e mondi persistenti settimanali. Non vanno sviluppati prima di aver
-dimostrato nei playtest che raccolta, costruzione, combattimento e raid sono divertenti.
+The first minute should teach one action at a time: find a marked resource, gather it, craft a
+blaster, place a useful defense and locate the team depot. The tutorial is dismissible and
+reopenable. Objective guidance should refer to visible landmarks and world markers rather than
+requiring players to interpret raw coordinates. Menus must be operable without a mouse on touch
+and controller, while aiming remains first person.
+
+## Scope and open balance questions
+
+The initial content set is intentionally small. Prioritize dependable controls, meaningful base
+defense, clear feedback and a full enjoyable round before expanding the item catalog. The asset
+budget is zero: create original procedural art or verify any free resource before importing it.
+The four original environment models were uploaded and their colors verified in the Studio editor.
+Their appearance and behavior in the playable game, private-staging asset delivery and real-device
+performance remain acceptance work.
+
+Vehicles, agriculture, electrical simulation, trading, clans and persistent weekly worlds are
+outside the current release scope. Party matchmaking, cross-server reconnection, cosmetics and
+more content are later decisions informed by tests. Measure whether 20 minutes is still too long,
+whether late entrants can contribute, and whether depot theft creates recoverable setbacks rather
+than unavoidable defeat.

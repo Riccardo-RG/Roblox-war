@@ -1,0 +1,87 @@
+newmtl bark
+Kd 0.32 0.25 0.18
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl barkLight
+Kd 0.43 0.34 0.24
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl leaves
+Kd 0.25 0.39 0.24
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl leavesLight
+Kd 0.34 0.48 0.28
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl leavesDark
+Kd 0.19 0.31 0.2
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl rock
+Kd 0.48 0.51 0.48
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl rockLight
+Kd 0.59 0.6 0.55
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl wood
+Kd 0.5 0.39 0.27
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl metal
+Kd 0.31 0.36 0.37
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl paint
+Kd 0.61 0.39 0.23
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2
+
+newmtl accent
+Kd 0.55 0.67 0.62
+Ka 0 0 0
+Ks 0.06 0.06 0.06
+Ns 8
+d 1
+illum 2

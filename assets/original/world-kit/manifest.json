@@ -1,0 +1,72 @@
+{
+  "provenance": "Original procedural artwork authored for WAR WORLD, 2026. No third-party assets.",
+  "integrationStatus": "Studio import completed successfully on 2026-09-27 with 12 mesh asset IDs and one shared palette texture asset ID. The saved authoring place contains ServerStorage.WorldArtLibrary; its validated library was exported to WorldArtLibrary.rbxmx and included in a successful main Rojo build. XML inspection confirms mesh/texture IDs, hierarchy, anchoring, render settings and physics payloads survived the build. Runtime appearance, published asset permissions and staging/public release are not certified by this export.",
+  "studioImport": {
+    "preview": "GLB colours verified",
+    "upload": "Completed in Studio; saved XML contains 12 distinct mesh asset IDs and one shared palette texture asset ID",
+    "assetIds": [
+      "71505705951471",
+      "75874966760440",
+      "91861685011558",
+      "93858857661642",
+      "96332452588684",
+      "98898514185910",
+      "102236305363432",
+      "104499890278686",
+      "111657153368815",
+      "111688912175965",
+      "118552427037805",
+      "120781304338136",
+      "133492451295511"
+    ],
+    "sharedPaletteTextureAssetId": "96332452588684",
+    "libraryIntegrated": true,
+    "authoringPlace": "build/WarWorldArt.rbxlx",
+    "exportedLibrary": "assets/original/world-kit/WorldArtLibrary.rbxmx",
+    "exportValidation": "Exact four direct Model templates; 5/2/3/2 MeshParts; all anchored; Automatic RenderFidelity; numeric mesh/texture IDs; no scripts or external instance references; 13 referenced SharedStrings and all library properties/hierarchy preserved",
+    "collisionFidelity": "Hull configured in Studio; saved XML has no explicit enum tokens, so the export preserves all 12 opaque PhysicalConfigData payloads without claiming offline enum verification",
+    "rojoBuildVerified": true,
+    "runtimeVerified": false,
+    "publishedAssetPermissionsVerified": false
+  },
+  "units": "OBJ and GLB positions use numeric Roblox stud dimensions. Inspect importer unit conversion: CoastalPine must be approximately 23.8 studs high.",
+  "import": "WorldArtLibrary.glb was imported successfully in Studio. The four templates were copied into ServerStorage.WorldArtLibrary and the authoring place was saved. scripts/export-studio-art.py exports only that validated library to WorldArtLibrary.rbxmx, which default.project.json maps into ServerStorage. Keep the saved authoring place and verify the rebuilt game's rendering and private staging asset permissions before release.",
+  "models": {
+    "CoastalPine": {
+      "vertices": 430,
+      "triangles": 792,
+      "materialParts": 5,
+      "dimensionsStuds": [15.2826, 23.8482, 13.089],
+      "glbBytes": 86912
+    },
+    "CoastalRock": {
+      "vertices": 45,
+      "triangles": 82,
+      "materialParts": 2,
+      "dimensionsStuds": [9.6852, 5.4, 7.6665],
+      "glbBytes": 11300
+    },
+    "SupplyCrate": {
+      "vertices": 80,
+      "triangles": 120,
+      "materialParts": 3,
+      "dimensionsStuds": [4.6, 3.52, 3.795],
+      "glbBytes": 16008
+    },
+    "ScrapPile": {
+      "vertices": 72,
+      "triangles": 116,
+      "materialParts": 2,
+      "dimensionsStuds": [6.3493, 2.2917, 5.0997],
+      "glbBytes": 14748
+    }
+  },
+  "library": {
+    "filename": "WorldArtLibrary.glb",
+    "childModels": ["CoastalPine", "CoastalRock", "SupplyCrate", "ScrapPile"],
+    "triangles": 1110,
+    "materialParts": 12,
+    "glbBytes": 126760,
+    "sharedPaletteImages": 1
+  }
+}

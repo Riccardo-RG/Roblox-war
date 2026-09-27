@@ -1,25 +1,24 @@
 export class RateLimiter {
-  private readonly lastActions = new Map<string, number>();
+  private readonly lastActions = new Map<Player, Map<string, number>>();
 
   public allow(player: Player, action: string, minimumIntervalSeconds: number): boolean {
-    const key = `${player.UserId}:${action}`;
+    let actions = this.lastActions.get(player);
+    if (actions === undefined) {
+      actions = new Map<string, number>();
+      this.lastActions.set(player, actions);
+    }
     const now = os.clock();
-    const previous = this.lastActions.get(key);
+    const previous = actions.get(action);
 
     if (previous !== undefined && now - previous < minimumIntervalSeconds) {
       return false;
     }
 
-    this.lastActions.set(key, now);
+    actions.set(action, now);
     return true;
   }
 
   public removePlayer(player: Player): void {
-    const prefix = `${player.UserId}:`;
-    for (const [key] of this.lastActions) {
-      if (key.sub(1, prefix.size()) === prefix) {
-        this.lastActions.delete(key);
-      }
-    }
+    this.lastActions.delete(player);
   }
 }

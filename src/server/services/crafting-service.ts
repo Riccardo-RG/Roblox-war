@@ -1,11 +1,11 @@
-import { CollectionService } from "@rbxts/services";
+import { CollectionService, Workspace } from "@rbxts/services";
 import { RECIPES, type RecipeId } from "shared/catalog/recipes";
 import {
   localized,
   type LocalizationKey,
   type LocalizedMessage,
 } from "shared/localization/translations";
-import { horizontalDistance } from "shared/util/math";
+import { canInteract, livingRoot } from "server/services/interaction-guard";
 import { PlayerStateService } from "server/services/player-state-service";
 import { RateLimiter } from "server/services/rate-limiter";
 
@@ -22,6 +22,8 @@ export class CraftingService {
     if (
       state === undefined ||
       state.isSpectator ||
+      livingRoot(player) === undefined ||
+      Workspace.GetAttribute("MatchPhase") === "Complete" ||
       !this.rateLimiter.allow(player, "Craft", 0.35)
     ) {
       return;
@@ -45,6 +47,7 @@ export class CraftingService {
       return;
     }
     this.playerState.add(player, recipe.output.itemId, recipe.output.amount);
+    this.playerState.recordAction(player, "crafted");
     const craftedMessages: Record<RecipeId, LocalizationKey> = {
       survival_blaster: "toast.crafted_blaster",
       bandage: "toast.crafted_bandage",
@@ -69,7 +72,13 @@ export class CraftingService {
         : instance.IsA("Model")
           ? instance.GetPivot().Position
           : undefined;
-      if (position !== undefined && horizontalDistance(root.Position, position) <= 18) {
+      const ownerTeam = instance.GetAttribute("OwnerTeam");
+      if (
+        position !== undefined &&
+        instance.IsA("BasePart") &&
+        ownerTeam === player.Team?.Name &&
+        canInteract(player, instance, 18)
+      ) {
         return true;
       }
     }

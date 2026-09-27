@@ -18,9 +18,14 @@ const requiredFiles = [
   "src/server/services/profile-store-service.ts",
   "src/server/services/reconnect-service.ts",
   "src/server/services/world-event-service.ts",
+  "src/server/services/depot-service.ts",
+  "src/server/services/interaction-guard.ts",
+  "scripts/test-server-policies.mjs",
   "src/server/world/world-art.ts",
   "src/client/main.client.ts",
   "src/client/controllers/game-controller.ts",
+  "src/client/controllers/input-policy.ts",
+  "src/client/ui/onboarding-policy.ts",
   "src/client/localization/localizer.ts",
   "src/client/ui/ui-controller.ts",
   "docs/LOCALIZZAZIONE.md",
@@ -29,6 +34,8 @@ const requiredFiles = [
   "docs/ROADMAP.md",
   "out/server/main.server.luau",
   "out/client/main.client.luau",
+  "out/client/controllers/input-policy.luau",
+  "out/client/ui/onboarding-policy.luau",
   "out/shared/localization/translations.luau",
   "out/client/localization/localizer.luau",
   "out/server/localization/install-localization.luau",
@@ -73,9 +80,11 @@ if (project.tree?.Lighting?.$properties?.Technology !== "Voxel") {
 
 if (
   project.tree?.Lighting?.$properties?.LightingStyle !== "Realistic" ||
-  project.tree?.Lighting?.$properties?.PrioritizeLightingQuality !== true
+  typeof project.tree?.Lighting?.$properties?.PrioritizeLightingQuality !== "boolean"
 ) {
-  throw new Error("Lighting must keep the realistic high-quality rendering profile.");
+  throw new Error(
+    "Lighting must explicitly configure its realistic rendering profile and quality tradeoff.",
+  );
 }
 
 for (const colorProperty of ["Ambient", "OutdoorAmbient"]) {
@@ -111,6 +120,7 @@ for (const script of [
   "format:check",
   "validate",
   "validate:localization",
+  "test:server",
   "rojo:build",
   "rojo:sourcemap",
   "check",
@@ -157,28 +167,19 @@ const profileStoreSource = await readFile(
   path.join(root, "src/server/services/profile-store-service.ts"),
   "utf8",
 );
-for (const fallbackMarker of [
-  "pcall(() => DataStoreService.GetDataStore",
-  "store === undefined",
-  "unsafeToSave",
+// Structural presence only. Behavioral safety is exercised by test:server.
+for (const persistenceMarker of [
+  "canClaimProfileSession",
+  "canWriteProfileSession",
+  "public release(",
 ]) {
-  if (!profileStoreSource.includes(fallbackMarker)) {
-    throw new Error(`Studio profile fallback is missing guard: ${fallbackMarker}`);
+  if (!profileStoreSource.includes(persistenceMarker)) {
+    throw new Error(`Profile session implementation is missing entry point: ${persistenceMarker}`);
   }
 }
 
-const uiSource = await readFile(path.join(root, "src/client/ui/ui-controller.ts"), "utf8");
-for (const tutorialMarker of [
-  "TUTORIAL_STEPS",
-  "TutorialOverlay",
-  "TutorialHelp",
-  "Modal = visible",
-  "SortOrder = Enum.SortOrder.LayoutOrder",
-]) {
-  if (!uiSource.includes(tutorialMarker)) {
-    throw new Error(`Onboarding tutorial is missing UI marker: ${tutorialMarker}`);
-  }
-}
+// Input and onboarding decisions run in test:server; source-name checks cannot
+// establish correct focus handling or a usable tutorial on real devices.
 
 const localizationSource = await readFile(
   path.join(root, "src/shared/localization/translations.ts"),
@@ -219,6 +220,9 @@ for (const compiledService of [
   "loot-service",
   "reconnect-service",
   "world-event-service",
+  "depot-service",
+  "input-policy",
+  "onboarding-policy",
 ]) {
   if (!sourcemapText.includes(`\"name\":\"${compiledService}\"`)) {
     throw new Error(`Rojo sourcemap is missing compiled service: ${compiledService}`);

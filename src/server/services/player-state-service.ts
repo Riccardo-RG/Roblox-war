@@ -1,6 +1,15 @@
 import { ITEMS, type ItemId } from "shared/catalog/items";
 import type { Ingredient } from "shared/catalog/recipes";
-import type { InventoryEntry, PersistentProfile, PublicProfile } from "shared/types/game";
+import type {
+  InventoryEntry,
+  PersistentProfile,
+  PublicProfile,
+  TutorialProgress,
+} from "shared/types/game";
+
+function emptyProgress(): TutorialProgress {
+  return { harvested: 0, crafted: 0, built: 0, deposited: 0, extracted: 0 };
+}
 
 export interface RuntimePlayerState {
   readonly inventory: Map<ItemId, number>;
@@ -8,6 +17,8 @@ export interface RuntimePlayerState {
   isSpectator: boolean;
   buildPartCount: number;
   extractedThisMatch: boolean;
+  progress: TutorialProgress;
+  joinedAt: number;
 }
 
 export interface MatchResumeState {
@@ -16,6 +27,8 @@ export interface MatchResumeState {
   readonly isSpectator: boolean;
   readonly buildPartCount: number;
   readonly extractedThisMatch: boolean;
+  readonly progress: TutorialProgress;
+  readonly participatedSeconds: number;
 }
 
 export class PlayerStateService {
@@ -44,6 +57,8 @@ export class PlayerStateService {
       isSpectator,
       buildPartCount: 0,
       extractedThisMatch: false,
+      progress: emptyProgress(),
+      joinedAt: os.clock(),
     };
     this.states.set(player, state);
     this.changed.Fire(player);
@@ -67,6 +82,8 @@ export class PlayerStateService {
     state.isSpectator = isSpectator;
     state.buildPartCount = 0;
     state.extractedThisMatch = false;
+    state.progress = emptyProgress();
+    state.joinedAt = os.clock();
     this.changed.Fire(player);
   }
 
@@ -81,6 +98,8 @@ export class PlayerStateService {
       isSpectator: state.isSpectator,
       buildPartCount: state.buildPartCount,
       extractedThisMatch: state.extractedThisMatch,
+      progress: { ...state.progress },
+      participatedSeconds: math.max(0, os.clock() - state.joinedAt),
     };
   }
 
@@ -95,6 +114,8 @@ export class PlayerStateService {
       isSpectator: resume.isSpectator,
       buildPartCount: resume.buildPartCount,
       extractedThisMatch: resume.extractedThisMatch,
+      progress: { ...resume.progress },
+      joinedAt: os.clock() - resume.participatedSeconds,
     };
     this.states.set(player, state);
     this.changed.Fire(player);
@@ -255,7 +276,23 @@ export class PlayerStateService {
     const state = this.states.get(player);
     if (state !== undefined) {
       state.buildPartCount += 1;
+      this.recordAction(player, "built");
     }
+  }
+
+  public setBuildCount(player: Player, count: number): void {
+    const state = this.states.get(player);
+    if (state !== undefined) {
+      state.buildPartCount = math.max(0, math.floor(count));
+      this.changed.Fire(player);
+    }
+  }
+
+  public recordAction(player: Player, action: keyof TutorialProgress, amount = 1): void {
+    const state = this.states.get(player);
+    if (state === undefined || amount <= 0) return;
+    state.progress[action] += math.floor(amount);
+    this.changed.Fire(player);
   }
 
   public inventorySnapshot(player: Player): ReadonlyArray<InventoryEntry> {

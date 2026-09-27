@@ -54,7 +54,7 @@ export const ITEMS: Readonly<Record<ItemId, ItemDefinition>> = {
     id: "energy_core",
     displayName: "Nucleo energetico",
     category: "Objective",
-    stackLimit: 20,
+    stackLimit: 3,
     color: Color3.fromRGB(72, 226, 255),
   },
   multi_tool: {

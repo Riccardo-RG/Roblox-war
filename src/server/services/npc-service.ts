@@ -1,5 +1,17 @@
-import { CollectionService, Players, Workspace } from "@rbxts/services";
-import { horizontalDistance } from "shared/util/math";
+import { CollectionService, PathfindingService, Players, Workspace } from "@rbxts/services";
+
+const DRONE_SPEED = 10;
+const DRONE_ATTACK_RANGE = 6;
+const DRONE_LEASH_RANGE = 85;
+const NAVIGATION_INTERVAL = 1.5;
+
+interface DroneNavigation {
+  waypoints: Vector3[];
+  nextWaypoint: number;
+  lastComputedAt: number;
+  computing: boolean;
+  destination: Vector3;
+}
 
 const DRONE_SPAWNS = [
   new Vector3(-130, 5, -78),
@@ -36,6 +48,7 @@ export class NpcService {
   private readonly enemiesFolder: Folder;
   private readonly drones = new Set<Model>();
   private readonly lastAttacks = new Map<Model, number>();
+  private readonly navigation = new Map<Model, DroneNavigation>();
   private running = true;
   private respawnGeneration = 0;
 
@@ -57,7 +70,16 @@ export class NpcService {
 
   public damage(instance: Instance, amount: number, source: Player): boolean | undefined {
     const model = instance.IsA("Model") ? instance : instance.FindFirstAncestorOfClass("Model");
-    if (model === undefined || !CollectionService.HasTag(model, "EnemyNPC")) {
+    if (
+      model === undefined ||
+      !this.drones.has(model) ||
+      !CollectionService.HasTag(model, "EnemyNPC") ||
+      !this.canTarget(source)
+    ) {
+      return undefined;
+    }
+    const shooter = source.Character?.FindFirstChildOfClass("Humanoid");
+    if (shooter === undefined || shooter.Health <= 0) {
       return undefined;
     }
 
@@ -72,6 +94,7 @@ export class NpcService {
       const spawnPosition = model.GetAttribute("SpawnPosition");
       this.drones.delete(model);
       this.lastAttacks.delete(model);
+      this.navigation.delete(model);
       model.Destroy();
       this.onDefeated(source);
       if (typeIs(spawnPosition, "Vector3")) {
@@ -99,6 +122,7 @@ export class NpcService {
     }
     this.drones.clear();
     this.lastAttacks.clear();
+    this.navigation.clear();
     for (const position of DRONE_SPAWNS) {
       this.spawnDrone(position);
     }
@@ -193,15 +217,28 @@ export class NpcService {
   }
 
   private updateLoop(): void {
+    let previousUpdate = os.clock();
     while (this.running) {
+      const now = os.clock();
+      const deltaTime = math.clamp(now - previousUpdate, 0, 0.25);
+      previousUpdate = now;
       for (const drone of this.drones) {
         if (!drone.Parent || drone.PrimaryPart === undefined) {
           this.drones.delete(drone);
+          this.navigation.delete(drone);
           continue;
         }
 
-        const target = this.findNearestTarget(drone.PrimaryPart.Position);
+        const spawnPosition = drone.GetAttribute("SpawnPosition");
+        if (!typeIs(spawnPosition, "Vector3")) {
+          continue;
+        }
+        const dronePosition = drone.PrimaryPart.Position;
+        const target = this.findNearestTarget(dronePosition, spawnPosition);
         if (target === undefined) {
+          if (dronePosition.sub(spawnPosition).Magnitude > 2) {
+            this.moveDrone(drone, spawnPosition, deltaTime);
+          }
           continue;
         }
         const root = target.Character?.FindFirstChild("HumanoidRootPart");
@@ -210,32 +247,30 @@ export class NpcService {
           continue;
         }
 
-        const dronePosition = drone.PrimaryPart.Position;
-        const distance = horizontalDistance(dronePosition, root.Position);
-        if (distance > 6) {
-          const direction = new Vector3(
-            root.Position.X - dronePosition.X,
-            0,
-            root.Position.Z - dronePosition.Z,
+        const distance = dronePosition.sub(root.Position).Magnitude;
+        const visible = this.hasLineOfSight(drone, root.Position, target.Character);
+        if (distance > DRONE_ATTACK_RANGE || !visible) {
+          // Navigation finds a route around buildings; every actual movement
+          // remains swept against geometry, including newly placed player walls.
+          this.moveDrone(
+            drone,
+            root.Position.add(new Vector3(0, 2, 0)),
+            deltaTime,
+            target.Character,
           );
-          if (direction.Magnitude > 0.1) {
-            const nextPosition = dronePosition.add(direction.Unit.mul(math.min(2.2, distance - 5)));
-            drone.PivotTo(CFrame.lookAt(nextPosition, root.Position));
-          }
         } else {
-          const now = os.clock();
           const previous = this.lastAttacks.get(drone) ?? 0;
           if (now - previous >= 1.25) {
             this.lastAttacks.set(drone, now);
-            humanoid.TakeDamage(10);
+            this.beginAttack(drone, target);
           }
         }
       }
-      task.wait(0.2);
+      task.wait(0.1);
     }
   }
 
-  private findNearestTarget(position: Vector3): Player | undefined {
+  private findNearestTarget(position: Vector3, spawnPosition: Vector3): Player | undefined {
     let nearest: Player | undefined;
     let nearestDistance = 58;
     for (const player of Players.GetPlayers()) {
@@ -247,12 +282,170 @@ export class NpcService {
       if (!root?.IsA("BasePart") || humanoid === undefined || humanoid.Health <= 0) {
         continue;
       }
-      const distance = horizontalDistance(position, root.Position);
+      if (root.Position.sub(spawnPosition).Magnitude > DRONE_LEASH_RANGE) {
+        continue;
+      }
+      const distance = position.sub(root.Position).Magnitude;
       if (distance < nearestDistance) {
         nearest = player;
         nearestDistance = distance;
       }
     }
     return nearest;
+  }
+
+  private hasLineOfSight(drone: Model, destination: Vector3, target?: Model): boolean {
+    const origin = drone.PrimaryPart?.Position;
+    if (origin === undefined) {
+      return false;
+    }
+    const parameters = this.movementParameters(drone);
+    const hit = Workspace.Raycast(origin, destination.sub(origin), parameters);
+    return hit === undefined || (target !== undefined && hit.Instance.IsDescendantOf(target));
+  }
+
+  private beginAttack(drone: Model, target: Player): void {
+    const generation = this.respawnGeneration;
+    const optic = drone.FindFirstChild("Optic");
+    if (optic?.IsA("BasePart")) {
+      optic.Color = Color3.fromRGB(255, 191, 70);
+    }
+    drone.SetAttribute("AttackWindupUntil", Workspace.GetServerTimeNow() + 0.4);
+    task.delay(0.4, () => {
+      if (!this.running || generation !== this.respawnGeneration || !this.drones.has(drone)) {
+        return;
+      }
+      if (optic?.IsA("BasePart")) {
+        optic.Color = Color3.fromRGB(242, 72, 91);
+      }
+      const character = target.Character;
+      const root = character?.FindFirstChild("HumanoidRootPart");
+      const humanoid = character?.FindFirstChildOfClass("Humanoid");
+      const dronePosition = drone.PrimaryPart?.Position;
+      if (
+        this.canTarget(target) &&
+        root?.IsA("BasePart") &&
+        humanoid !== undefined &&
+        humanoid.Health > 0 &&
+        dronePosition !== undefined &&
+        root.Position.sub(dronePosition).Magnitude <= DRONE_ATTACK_RANGE &&
+        this.hasLineOfSight(drone, root.Position, character)
+      ) {
+        humanoid.TakeDamage(10);
+      }
+    });
+  }
+
+  private movementParameters(drone: Model): RaycastParams {
+    const parameters = new RaycastParams();
+    parameters.FilterType = Enum.RaycastFilterType.Exclude;
+    parameters.FilterDescendantsInstances = [drone];
+    parameters.RespectCanCollide = true;
+    parameters.IgnoreWater = true;
+    return parameters;
+  }
+
+  private moveDrone(
+    drone: Model,
+    destination: Vector3,
+    deltaTime: number,
+    targetCharacter?: Model,
+  ): void {
+    const origin = drone.PrimaryPart?.Position;
+    if (origin === undefined) {
+      return;
+    }
+    const parameters = this.movementParameters(drone);
+    const direct = destination.sub(origin);
+    if (direct.Magnitude <= 0.2) {
+      return;
+    }
+    const routeParameters = this.movementParameters(drone);
+    if (targetCharacter !== undefined) {
+      routeParameters.FilterDescendantsInstances = [drone, targetCharacter];
+    }
+    const directObstacle = Workspace.Spherecast(origin, 2, direct, routeParameters);
+    let waypoint = destination;
+    if (directObstacle !== undefined) {
+      let route = this.navigation.get(drone);
+      if (route === undefined) {
+        route = {
+          waypoints: [],
+          nextWaypoint: 0,
+          lastComputedAt: -NAVIGATION_INTERVAL,
+          computing: false,
+          destination,
+        };
+        this.navigation.set(drone, route);
+      }
+      if (!route.computing && os.clock() - route.lastComputedAt >= NAVIGATION_INTERVAL) {
+        this.computeRoute(drone, route, destination);
+      }
+      let nextWaypointPosition = route.waypoints[route.nextWaypoint];
+      while (nextWaypointPosition !== undefined && nextWaypointPosition.sub(origin).Magnitude < 2) {
+        route.nextWaypoint += 1;
+        nextWaypointPosition = route.waypoints[route.nextWaypoint];
+      }
+      if (nextWaypointPosition === undefined) {
+        return;
+      }
+      waypoint = nextWaypointPosition;
+    } else {
+      this.navigation.delete(drone);
+    }
+
+    const direction = waypoint.sub(origin);
+    if (direction.Magnitude <= 0.1) {
+      return;
+    }
+    const step = direction.Unit.mul(math.min(DRONE_SPEED * deltaTime, direction.Magnitude));
+    const obstacle = Workspace.Spherecast(origin, 2, step, parameters);
+    if (obstacle !== undefined) {
+      return;
+    }
+    const position = origin.add(step);
+    const lookAt = new Vector3(destination.X, position.Y, destination.Z);
+    drone.PivotTo(
+      position.sub(lookAt).Magnitude > 0.1 ? CFrame.lookAt(position, lookAt) : new CFrame(position),
+    );
+  }
+
+  private computeRoute(drone: Model, route: DroneNavigation, destination: Vector3): void {
+    const origin = drone.PrimaryPart?.Position;
+    if (origin === undefined) {
+      return;
+    }
+    route.computing = true;
+    route.lastComputedAt = os.clock();
+    route.destination = destination;
+    const generation = this.respawnGeneration;
+    task.spawn(() => {
+      const path = PathfindingService.CreatePath({
+        AgentRadius: 2.5,
+        AgentHeight: 6,
+        AgentCanJump: false,
+        WaypointSpacing: 4,
+      });
+      const [success] = pcall(() =>
+        path.ComputeAsync(origin.sub(new Vector3(0, 3, 0)), destination.sub(new Vector3(0, 3, 0))),
+      );
+      if (
+        this.running &&
+        generation === this.respawnGeneration &&
+        drone.Parent !== undefined &&
+        this.navigation.get(drone) === route
+      ) {
+        route.computing = false;
+        if (success && path.Status === Enum.PathStatus.Success) {
+          route.waypoints = path
+            .GetWaypoints()
+            .map((point) => point.Position.add(new Vector3(0, 4, 0)));
+          route.nextWaypoint = 0;
+        } else {
+          route.waypoints = [];
+        }
+      }
+      path.Destroy();
+    });
   }
 }

@@ -1,9 +1,19 @@
-import { CollectionService, TweenService, Workspace } from "@rbxts/services";
+import { CollectionService, Players, TweenService, Workspace } from "@rbxts/services";
 import { BUILD_PIECES, type BuildPieceId } from "shared/catalog/build-pieces";
-import { MAX_BUILD_PARTS_PER_PLAYER, WORLD_HALF_EXTENT } from "shared/catalog/match-config";
+import {
+  MAX_BUILD_PARTS_PER_PLAYER,
+  MAX_BUILD_STRUCTURES_PER_TEAM,
+  MAX_BUILD_STRUCTURES_PER_SERVER,
+} from "shared/catalog/match-config";
+import { BUILD_RULES } from "shared/catalog/build-rules";
+import {
+  getCampPosition,
+  MONUMENT_POSITIONS,
+  isPlayableIslandPosition,
+} from "server/world/world-layout";
+import { canInteract, livingRoot } from "server/services/interaction-guard";
 import { localized, sourceFor, type LocalizedMessage } from "shared/localization/translations";
 import {
-  horizontalDistance,
   isFiniteCFrame,
   isFiniteVector3,
   sanitizeRightAngleYaw,
@@ -17,6 +27,7 @@ import { TeamService } from "server/services/team-service";
 export class BuildingService {
   private readonly rateLimiter = new RateLimiter();
   private readonly buildsFolder: Folder;
+  private readonly noBuildZones = new Array<BasePart>();
 
   public constructor(
     private readonly playerState: PlayerStateService,
@@ -28,6 +39,31 @@ export class BuildingService {
     this.buildsFolder = Workspace.WaitForChild("World")
       .WaitForChild("GeneratedWorld")
       .WaitForChild("Builds") as Folder;
+    const zones = new Instance("Folder");
+    zones.Name = "ProtectedBuildZones";
+    zones.Parent = this.buildsFolder.Parent;
+    const addZone = (name: string, position: Vector3, radius: number) => {
+      const zone = new Instance("Part");
+      zone.Name = name;
+      zone.Anchored = true;
+      zone.Transparency = 1;
+      zone.CanCollide = false;
+      zone.CanQuery = false;
+      zone.CanTouch = false;
+      zone.Size = new Vector3(radius * 2, 160, radius * 2);
+      zone.CFrame = new CFrame(position);
+      zone.Parent = zones;
+      CollectionService.AddTag(zone, "NoBuildZone");
+      this.noBuildZones.push(zone);
+    };
+    addZone("ExtractionClearance", Vector3.zero, BUILD_RULES.extractionClearance);
+    for (const position of MONUMENT_POSITIONS)
+      addZone("MonumentClearance", position, BUILD_RULES.monumentClearance);
+    for (let index = 0; index < this.teams.all().size(); index += 1) {
+      const camp = getCampPosition(index, this.teams.all().size());
+      addZone("SpawnClearance", camp, BUILD_RULES.spawnClearance);
+      addZone("DepotClearance", camp.add(new Vector3(12, 0, 0)), BUILD_RULES.depotClearance);
+    }
   }
 
   public place(player: Player, pieceId: BuildPieceId, requestedCFrame: CFrame): void {
@@ -38,14 +74,22 @@ export class BuildingService {
     if (!this.rateLimiter.allow(player, "PlaceBuild", 0.22)) {
       return;
     }
-    if (state.buildPartCount >= MAX_BUILD_PARTS_PER_PLAYER) {
+    const ownedCount = this.countBuilds(player.UserId);
+    if (ownedCount >= MAX_BUILD_PARTS_PER_PLAYER) {
       this.toast(player, localized("toast.build_limit"));
+      return;
+    }
+    if (
+      this.buildsFolder.GetChildren().size() >= MAX_BUILD_STRUCTURES_PER_SERVER ||
+      this.countTeamBuilds(this.teams.nameFor(player)) >= MAX_BUILD_STRUCTURES_PER_TEAM
+    ) {
+      this.toast(player, localized("toast.build_budget"));
       return;
     }
 
     const definition = BUILD_PIECES[pieceId];
-    const root = player.Character?.FindFirstChild("HumanoidRootPart");
-    if (!root?.IsA("BasePart")) {
+    const root = livingRoot(player);
+    if (root === undefined) {
       return;
     }
 
@@ -53,27 +97,52 @@ export class BuildingService {
       return;
     }
     const snappedPosition = new Vector3(
-      snapNumber(requestedCFrame.Position.X, 1),
-      snapNumber(requestedCFrame.Position.Y, 0.5),
-      snapNumber(requestedCFrame.Position.Z, 1),
+      snapNumber(requestedCFrame.Position.X, BUILD_RULES.grid),
+      snapNumber(requestedCFrame.Position.Y, BUILD_RULES.heightGrid),
+      snapNumber(requestedCFrame.Position.Z, BUILD_RULES.grid),
     );
     if (
-      math.abs(snappedPosition.X) > WORLD_HALF_EXTENT ||
-      math.abs(snappedPosition.Z) > WORLD_HALF_EXTENT ||
-      snappedPosition.Y < 0 ||
-      snappedPosition.Y > 80 ||
-      horizontalDistance(root.Position, snappedPosition) > 35
+      !isPlayableIslandPosition(snappedPosition) ||
+      snappedPosition.Y < BUILD_RULES.minHeight ||
+      snappedPosition.Y > BUILD_RULES.maxHeight ||
+      root.Position.sub(snappedPosition).Magnitude > BUILD_RULES.maxDistance
     ) {
+      this.toast(player, localized("toast.build_out_of_range"));
       return;
     }
 
     const yaw = sanitizeRightAngleYaw(requestedCFrame);
     const sanitizedCFrame = new CFrame(snappedPosition).mul(CFrame.Angles(0, yaw, 0));
+    const sight = new RaycastParams();
+    sight.FilterType = Enum.RaycastFilterType.Exclude;
+    sight.FilterDescendantsInstances = player.Character !== undefined ? [player.Character] : [];
+    sight.IgnoreWater = true;
+    const head = player.Character?.FindFirstChild("Head");
+    const origin = head?.IsA("BasePart") ? head.Position : root.Position;
+    const obstruction = Workspace.Raycast(origin, snappedPosition.sub(origin), sight);
+    if (obstruction !== undefined && obstruction.Position.sub(snappedPosition).Magnitude > 0.75) {
+      this.toast(player, localized("toast.space_occupied"));
+      return;
+    }
+    const [, rotation] = sanitizedCFrame.ToEulerAnglesYXZ();
+    const swapAxes = math.abs(math.sin(rotation)) > 0.5;
+    const halfX = (swapAxes ? definition.size.Z : definition.size.X) / 2;
+    const halfZ = (swapAxes ? definition.size.X : definition.size.Z) / 2;
+    if (
+      this.noBuildZones.some(
+        (zone) =>
+          math.abs(snappedPosition.X - zone.Position.X) < zone.Size.X / 2 + halfX &&
+          math.abs(snappedPosition.Z - zone.Position.Z) < zone.Size.Z / 2 + halfZ,
+      )
+    ) {
+      this.toast(player, localized("toast.build_protected"));
+      return;
+    }
     if (!this.hasSupport(player, sanitizedCFrame, definition.size)) {
       this.toast(player, localized("toast.build_support"));
       return;
     }
-    if (this.overlapsExistingBuild(sanitizedCFrame, definition.size)) {
+    if (this.overlapsExistingBuild(player, sanitizedCFrame, definition.size)) {
       this.toast(player, localized("toast.space_occupied"));
       return;
     }
@@ -122,8 +191,7 @@ export class BuildingService {
       return;
     }
 
-    const root = player.Character?.FindFirstChild("HumanoidRootPart");
-    if (!root?.IsA("BasePart") || horizontalDistance(root.Position, target.Position) > 14) {
+    if (!canInteract(player, target, 14)) {
       return;
     }
     const buildRoot = this.resolveBuildRoot(target);
@@ -135,13 +203,12 @@ export class BuildingService {
       this.toast(player, localized("toast.friendly_base"));
       return;
     }
-    if (!this.playerState.consume(player, "breach_charge", 1)) {
-      this.toast(player, localized("toast.need_charge"));
+    const health = buildRoot.GetAttribute("Health");
+    if (!typeIs(health, "number") || health <= 0) {
       return;
     }
-
-    const health = buildRoot.GetAttribute("Health");
-    if (!typeIs(health, "number")) {
+    if (!this.playerState.consume(player, "breach_charge", 1)) {
+      this.toast(player, localized("toast.need_charge"));
       return;
     }
     const nextHealth = health - 125;
@@ -166,12 +233,32 @@ export class BuildingService {
     this.buildsFolder.ClearAllChildren();
   }
 
-  private overlapsExistingBuild(cframe: CFrame, size: Vector3): boolean {
+  public countBuilds(userId: number): number {
+    return this.buildsFolder
+      .GetChildren()
+      .filter((root) => root.GetAttribute("OwnerUserId") === userId)
+      .size();
+  }
+
+  private countTeamBuilds(teamName: string): number {
+    return this.buildsFolder
+      .GetChildren()
+      .filter((root) => root.GetAttribute("OwnerTeam") === teamName)
+      .size();
+  }
+
+  private overlapsExistingBuild(player: Player, cframe: CFrame, size: Vector3): boolean {
     const parameters = new OverlapParams();
-    parameters.FilterType = Enum.RaycastFilterType.Include;
-    parameters.FilterDescendantsInstances = [this.buildsFolder];
-    const shrunken = new Vector3(size.X * 0.88, size.Y * 0.88, size.Z * 0.88);
-    return Workspace.GetPartBoundsInBox(cframe, shrunken, parameters).size() > 0;
+    parameters.FilterType = Enum.RaycastFilterType.Exclude;
+    parameters.FilterDescendantsInstances = [];
+    const shrunken = new Vector3(
+      math.max(0.1, size.X - 0.3),
+      math.max(0.1, size.Y - 0.3),
+      math.max(0.1, size.Z - 0.3),
+    );
+    return Workspace.GetPartBoundsInBox(cframe, shrunken, parameters).some(
+      (part) => part.CanCollide,
+    );
   }
 
   private hasSupport(player: Player, cframe: CFrame, size: Vector3): boolean {
@@ -181,16 +268,36 @@ export class BuildingService {
       player.Character !== undefined ? [player.Character] : [];
     parameters.IgnoreWater = true;
 
-    const rayLength = size.Y / 2 + 2.5;
-    const result = Workspace.Raycast(
-      cframe.Position.add(new Vector3(0, 0.5, 0)),
-      new Vector3(0, -rayLength, 0),
-      parameters,
-    );
-    if (result === undefined || CollectionService.HasTag(result.Instance, "ResourceNode")) {
-      return false;
+    const samples = [
+      new Vector3(0, 0, 0),
+      new Vector3(-0.4, 0, -0.4),
+      new Vector3(-0.4, 0, 0.4),
+      new Vector3(0.4, 0, -0.4),
+      new Vector3(0.4, 0, 0.4),
+    ];
+    for (const sample of samples) {
+      const origin = cframe.PointToWorldSpace(
+        new Vector3(sample.X * size.X, -size.Y / 2 + 0.35, sample.Z * size.Z),
+      );
+      const result = Workspace.Raycast(origin, new Vector3(0, -1.55, 0), parameters);
+      if (
+        result === undefined ||
+        CollectionService.HasTag(result.Instance, "ResourceNode") ||
+        result.Normal.Y < 0.6 ||
+        result.Material === Enum.Material.Water ||
+        result.Instance.Name === "WorldBoundary"
+      )
+        return false;
+      if (CollectionService.HasTag(result.Instance, "PlayerBuild")) {
+        const support = this.resolveBuildRoot(result.Instance);
+        if (support?.GetAttribute("OwnerTeam") !== this.teams.nameFor(player)) return false;
+      } else if (
+        result.Instance !== Workspace.Terrain &&
+        result.Instance.GetAttribute("BuildableSurface") !== true
+      )
+        return false;
     }
-    return result.Instance.Name !== "Water" && result.Instance.Name !== "WorldBoundary";
+    return true;
   }
 
   private createDoorway(player: Player, cframe: CFrame, sequence: number): void {
@@ -238,15 +345,22 @@ export class BuildingService {
     prompt.AutoLocalize = true;
     prompt.RootLocalizationTable = this.localizationTable;
     prompt.KeyboardKeyCode = Enum.KeyCode.E;
+    prompt.GamepadKeyCode = Enum.KeyCode.ButtonX;
     prompt.MaxActivationDistance = 12;
-    prompt.RequiresLineOfSight = false;
+    prompt.RequiresLineOfSight = true;
     prompt.HoldDuration = 0;
     prompt.Parent = door;
     prompt.Triggered.Connect((activator) => this.toggleDoor(activator, model, door, prompt));
   }
 
   private toggleDoor(player: Player, model: Model, door: BasePart, prompt: ProximityPrompt): void {
-    if (!model.Parent || !door.Parent || model.GetAttribute("DoorMoving") === true) {
+    if (
+      !model.Parent ||
+      !door.Parent ||
+      model.GetAttribute("DoorMoving") === true ||
+      this.playerState.get(player)?.isSpectator !== false ||
+      !canInteract(player, door, 13)
+    ) {
       return;
     }
     const ownerTeam = model.GetAttribute("OwnerTeam");
@@ -397,6 +511,7 @@ export class BuildingService {
     detail.CanCollide = false;
     detail.CanQuery = false;
     detail.CanTouch = false;
+    detail.CastShadow = false;
     return detail;
   }
 
@@ -407,6 +522,13 @@ export class BuildingService {
     root.SetAttribute("OwnerTeam", this.teams.nameFor(player));
     root.SetAttribute("Health", definition.maxHealth);
     root.SetAttribute("MaxHealth", definition.maxHealth);
+    const ownerId = player.UserId;
+    root.Destroying.Connect(() =>
+      task.defer(() => {
+        const owner = Players.GetPlayerByUserId(ownerId);
+        if (owner !== undefined) this.playerState.setBuildCount(owner, this.countBuilds(ownerId));
+      }),
+    );
   }
 
   private resolveBuildRoot(target: BasePart): Instance | undefined {

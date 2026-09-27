@@ -1,6 +1,7 @@
 import { Players, Workspace } from "@rbxts/services";
 import { localized, type LocalizedMessage } from "shared/localization/translations";
 import { isFiniteVector3 } from "shared/util/math";
+import { canAwardElimination, validShotSequence } from "shared/util/combat-policy";
 import { MatchService } from "server/services/match-service";
 import { NpcService } from "server/services/npc-service";
 import { PlayerStateService } from "server/services/player-state-service";
@@ -13,6 +14,7 @@ const BLASTER_RANGE = 350;
 export class CombatService {
   private readonly rateLimiter = new RateLimiter();
   private readonly lastShotSequences = new Map<Player, number>();
+  private readonly awardedEliminations = new Set<Humanoid>();
 
   public constructor(
     private readonly playerState: PlayerStateService,
@@ -30,12 +32,11 @@ export class CombatService {
     if (
       state === undefined ||
       state.isSpectator ||
+      this.match.currentPhase() === "Complete" ||
       !this.playerState.has(player, "survival_blaster") ||
       !isFiniteVector3(origin) ||
       !isFiniteVector3(direction) ||
-      sequence !== math.floor(sequence) ||
-      sequence <= previousSequence ||
-      sequence > 1_000_000_000 ||
+      !validShotSequence(sequence, previousSequence) ||
       !this.rateLimiter.allow(player, "FireWeapon", 0.26)
     ) {
       return;
@@ -43,7 +44,14 @@ export class CombatService {
 
     const character = player.Character;
     const head = character?.FindFirstChild("Head");
-    if (!head?.IsA("BasePart") || origin.sub(head.Position).Magnitude > 9) {
+    const shooterHumanoid = character?.FindFirstChildOfClass("Humanoid");
+    if (
+      !head?.IsA("BasePart") ||
+      !isFiniteVector3(head.Position) ||
+      shooterHumanoid === undefined ||
+      shooterHumanoid.Health <= 0 ||
+      origin.sub(head.Position).Magnitude > 9
+    ) {
       return;
     }
     if (direction.Magnitude < 0.9 || direction.Magnitude > 1.1) {
@@ -56,9 +64,16 @@ export class CombatService {
     parameters.FilterDescendantsInstances = character !== undefined ? [character] : [];
     parameters.IgnoreWater = true;
 
-    const result = Workspace.Raycast(origin, direction.Unit.mul(BLASTER_RANGE), parameters);
-    const endpoint = result?.Position ?? origin.add(direction.Unit.mul(BLASTER_RANGE));
-    this.shotEffect(player, origin, endpoint);
+    // The client supplies aim only. Always trace from the server-observed head so an
+    // origin on the far side of a nearby wall cannot bypass that wall.
+    const authoritativeOrigin = head.Position;
+    const result = Workspace.Raycast(
+      authoritativeOrigin,
+      direction.Unit.mul(BLASTER_RANGE),
+      parameters,
+    );
+    const endpoint = result?.Position ?? authoritativeOrigin.add(direction.Unit.mul(BLASTER_RANGE));
+    this.shotEffect(player, authoritativeOrigin, endpoint);
     if (result === undefined) {
       return;
     }
@@ -72,19 +87,34 @@ export class CombatService {
     const model = result.Instance.FindFirstAncestorOfClass("Model");
     const humanoid = model?.FindFirstChildOfClass("Humanoid");
     const targetPlayer = model !== undefined ? Players.GetPlayerFromCharacter(model) : undefined;
-    if (humanoid === undefined || targetPlayer === undefined || targetPlayer === player) {
+    if (
+      humanoid === undefined ||
+      humanoid.Health <= 0 ||
+      targetPlayer === undefined ||
+      targetPlayer === player ||
+      this.playerState.get(targetPlayer)?.isSpectator !== false
+    ) {
       return;
     }
     if (!this.match.allowsPvp() || this.teams.areFriendly(player, targetPlayer)) {
       return;
     }
 
+    const previousHealth = humanoid.Health;
     humanoid.TakeDamage(BLASTER_DAMAGE);
-    const eliminated = humanoid.Health <= 0;
-    this.hitConfirm(player, eliminated);
+    const eliminated = canAwardElimination(
+      previousHealth,
+      humanoid.Health,
+      this.awardedEliminations.has(humanoid),
+    );
+    if (humanoid.Health < previousHealth) {
+      this.hitConfirm(player, eliminated);
+    }
     if (eliminated) {
-      this.playerState.awardProgress(player, 50, 10);
-      this.teams.addScore(player, 25);
+      this.awardedEliminations.add(humanoid);
+      humanoid.Destroying.Once(() => this.awardedEliminations.delete(humanoid));
+      this.playerState.awardProgress(player, 20, 4);
+      this.teams.addScore(player, 10);
     }
   }
 

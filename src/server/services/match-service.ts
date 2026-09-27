@@ -44,16 +44,8 @@ export class MatchService {
   }
 
   public canBackfill(): boolean {
-    if (this.phase === "Scavenge") {
-      return true;
-    }
-    if (this.phase !== "Conflict") {
-      return false;
-    }
-
-    const duration = this.durationFor(this.phaseDefinition);
-    const remaining = math.max(0, this.phaseEndsAt - Workspace.GetServerTimeNow());
-    return remaining > duration / 2;
+    // Every active phase is playable: joining must not mean spectating for minutes.
+    return this.phase !== "Complete";
   }
 
   public starterMultiplier(): number {
@@ -71,6 +63,7 @@ export class MatchService {
       for (const definition of MATCH_PHASES) {
         this.phaseDefinition = definition;
         this.phase = definition.phase;
+        Workspace.SetAttribute("MatchPhase", this.phase);
         this.phaseEndsAt = Workspace.GetServerTimeNow() + this.durationFor(definition);
         this.onPhaseChanged?.();
 
@@ -80,10 +73,12 @@ export class MatchService {
       }
 
       this.phase = "Complete";
+      Workspace.SetAttribute("MatchPhase", this.phase);
       this.phaseEndsAt = Workspace.GetServerTimeNow() + MATCH_RESTART_DELAY_SECONDS;
       this.matchEndsAt = this.phaseEndsAt;
-      this.onMatchCompleted?.();
       this.onPhaseChanged?.();
+      // Results must be the final toast, not immediately replaced by a phase notice.
+      this.onMatchCompleted?.();
       task.wait(MATCH_RESTART_DELAY_SECONDS);
     }
   }

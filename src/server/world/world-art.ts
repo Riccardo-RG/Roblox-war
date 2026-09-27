@@ -1,11 +1,16 @@
 import { CollectionService, Workspace } from "@rbxts/services";
 import type { ItemId } from "shared/catalog/items";
-
-const MONUMENT_POSITIONS = [
-  new Vector3(-115, 0, -70),
-  new Vector3(120, 0, -65),
-  new Vector3(0, 0, 125),
-] as const;
+import { cloneOriginalArt } from "server/world/original-art-library";
+import { generateIslandTerrain } from "server/world/terrain-generator";
+import {
+  getCampPosition,
+  horizontalDistance,
+  isProtectedWorldPosition,
+  islandRoutes,
+  MONUMENT_POSITIONS,
+  surfacePositionAt,
+  WORLD_ART_BUDGET,
+} from "server/world/world-layout";
 
 interface PartOptions {
   readonly canCollide?: boolean;
@@ -34,6 +39,7 @@ export function createWorldPart(
   part.BottomSurface = Enum.SurfaceType.Smooth;
   part.CanCollide = options?.canCollide ?? true;
   part.CanQuery = options?.canQuery ?? true;
+  part.CanTouch = false;
   part.Transparency = options?.transparency ?? 0;
   part.CastShadow = options?.castShadow ?? true;
   part.Parent = parent;
@@ -60,6 +66,7 @@ function createWedge(
   part.BottomSurface = Enum.SurfaceType.Smooth;
   part.CanCollide = options?.canCollide ?? true;
   part.CanQuery = options?.canQuery ?? true;
+  part.CanTouch = false;
   part.Transparency = options?.transparency ?? 0;
   part.CastShadow = options?.castShadow ?? true;
   part.Parent = parent;
@@ -113,32 +120,11 @@ function beamBetween(
   return beam;
 }
 
-function horizontalDistance(a: Vector3, b: Vector3): number {
-  return new Vector2(a.X - b.X, a.Z - b.Z).Magnitude;
-}
-
 export class WorldArt {
-  public createEnvironment(parent: Instance): void {
-    const terrain = Workspace.Terrain;
-    terrain.Clear();
-    terrain.FillBlock(new CFrame(0, -16, 0), new Vector3(880, 28, 880), Enum.Material.Water);
-
-    createWorldPart(
-      "IslandSoil",
-      new Vector3(600, 14, 600),
-      new CFrame(0, -7, 0),
-      Color3.fromRGB(92, 83, 67),
-      Enum.Material.Ground,
-      parent,
-    );
-    createWorldPart(
-      "IslandMeadow",
-      new Vector3(596, 1.2, 596),
-      new CFrame(0, -0.6, 0),
-      Color3.fromRGB(92, 125, 78),
-      Enum.Material.LeafyGrass,
-      parent,
-    );
+  public createEnvironment(parent: Instance, authoredTerrain = false): void {
+    if (!authoredTerrain) {
+      generateIslandTerrain();
+    }
 
     const boundaries = new Instance("Folder");
     boundaries.Name = "Boundaries";
@@ -157,7 +143,7 @@ export class WorldArt {
         Color3.fromRGB(255, 255, 255),
         Enum.Material.SmoothPlastic,
         boundaries,
-        { transparency: 1 },
+        { transparency: 1, castShadow: false },
       );
     }
 
@@ -173,7 +159,7 @@ export class WorldArt {
     for (let index = 0; index < teams.size(); index += 1) {
       const team = teams[index]!;
       const angle = (index / teams.size()) * math.pi * 2;
-      const position = new Vector3(math.cos(angle) * 205, 0, math.sin(angle) * 205);
+      const position = getCampPosition(index, teams.size());
       this.createTeamCamp(spawns, team, position, angle);
     }
   }
@@ -182,7 +168,6 @@ export class WorldArt {
     this.createDepot(parent, MONUMENT_POSITIONS[0]);
     this.createLaboratory(parent, MONUMENT_POSITIONS[1]);
     this.createPowerStation(parent, MONUMENT_POSITIONS[2]);
-    this.createExtractionRing(parent);
   }
 
   public createScenery(parent: Instance): void {
@@ -200,52 +185,63 @@ export class WorldArt {
     );
     plaza.CastShadow = false;
 
-    for (const monumentPosition of MONUMENT_POSITIONS) {
-      this.createPath(scenery, Vector3.zero, monumentPosition, 10);
-    }
-    const campPositions = [
-      new Vector3(205, 0, 0),
-      new Vector3(0, 0, 205),
-      new Vector3(-205, 0, 0),
-      new Vector3(0, 0, -205),
-    ];
-    for (const campPosition of campPositions) {
-      this.createPath(scenery, campPosition.mul(0.82), campPosition.mul(0.96), 7);
+    for (const [start, finish] of islandRoutes()) {
+      this.createRouteMarkers(scenery, start, finish);
     }
 
     const random = new Random(447921);
+    const occupied = new Array<Vector3>();
     let treesCreated = 0;
     let attempts = 0;
-    while (treesCreated < 34 && attempts < 240) {
+    while (treesCreated < WORLD_ART_BUDGET.sceneryTrees && attempts < 420) {
       attempts += 1;
-      const position = this.randomIslandPosition(random, 72, 278);
-      if (!this.isSceneryPositionFree(position, 35)) {
+      const position = this.randomIslandPosition(random, 76, 251);
+      if (
+        !this.isSceneryPositionFree(position, 9) ||
+        occupied.some((other) => horizontalDistance(other, position) < 16)
+      ) {
         continue;
       }
       this.createTree(scenery, position, random, treesCreated);
+      occupied.push(position);
       treesCreated += 1;
     }
 
-    for (let index = 0; index < 48; index += 1) {
-      const position = this.randomIslandPosition(random, 45, 284);
-      if (this.isSceneryPositionFree(position, 21)) {
+    for (let index = 0; index < WORLD_ART_BUDGET.rockClusters; index += 1) {
+      const position = this.randomIslandPosition(random, 52, 258);
+      if (
+        this.isSceneryPositionFree(position, 5) &&
+        occupied.every((other) => horizontalDistance(other, position) > 10)
+      ) {
         this.createRockCluster(scenery, position, random, index);
+        occupied.push(position);
       }
     }
 
-    for (let index = 0; index < 80; index += 1) {
-      const position = this.randomIslandPosition(random, 35, 286);
-      if (this.isSceneryPositionFree(position, 14)) {
+    for (let index = 0; index < WORLD_ART_BUDGET.grassTufts; index += 1) {
+      const position = this.randomIslandPosition(random, 50, 256);
+      if (this.isSceneryPositionFree(position, 2)) {
         this.createGrassTuft(scenery, position, random, index);
       }
     }
 
-    for (let index = 0; index < 18; index += 1) {
-      const position = this.randomIslandPosition(random, 55, 260);
-      if (this.isSceneryPositionFree(position, 26)) {
+    for (let index = 0; index < WORLD_ART_BUDGET.abandonedProps; index += 1) {
+      const position = this.randomIslandPosition(random, 60, 245);
+      if (
+        this.isSceneryPositionFree(position, 6) &&
+        occupied.every((other) => horizontalDistance(other, position) > 10)
+      ) {
         this.createAbandonedDebris(scenery, position, random, index);
       }
     }
+
+    const count = scenery
+      .GetDescendants()
+      .filter((instance) => instance.IsA("BasePart"))
+      .size();
+    scenery.SetAttribute("BasePartCount", count);
+    scenery.SetAttribute("BasePartBudget", WORLD_ART_BUDGET.sceneryBaseParts);
+    assert(count <= WORLD_ART_BUDGET.sceneryBaseParts, "Scenery exceeds its declared part budget.");
   }
 
   public decorateResourceNode(node: Part, itemId: ItemId, random: Random): void {
@@ -258,36 +254,20 @@ export class WorldArt {
       node.CFrame = new CFrame(node.Position).mul(CFrame.Angles(0, 0, math.pi / 2));
       node.Color = Color3.fromRGB(104, 73, 50);
       node.Material = Enum.Material.Wood;
-      for (let index = 0; index < 4; index += 1) {
-        const angle = (index / 4) * math.pi * 2 + random.NextNumber(-0.25, 0.25);
-        const leaf = createWorldPart(
-          `Crown_${index}`,
-          new Vector3(
-            random.NextNumber(5.5, 7.5),
-            random.NextNumber(4, 6),
-            random.NextNumber(5.5, 7.5),
-          ),
-          new CFrame(
-            node.Position.add(
-              new Vector3(
-                math.cos(angle) * 2.3,
-                random.NextNumber(4.1, 6.2),
-                math.sin(angle) * 2.3,
-              ),
-            ),
-          ),
-          Color3.fromRGB(67 + index * 4, 112 + index * 5, 55),
-          Enum.Material.LeafyGrass,
-          node,
-          { canCollide: false, canQuery: false },
-        );
-        leaf.Shape = Enum.PartType.Ball;
+      const ground = node.Position.sub(new Vector3(0, 6, 0));
+      if (
+        cloneOriginalArt("CoastalPine", node, ground, 0.78, random.NextNumber(0, math.pi * 2)) !==
+        undefined
+      ) {
+        node.Transparency = 1;
+      } else {
+        this.createBranchedCrown(node, ground, 17, random);
       }
       return;
     }
 
     if (itemId === "stone") {
-      node.Shape = Enum.PartType.Ball;
+      node.Shape = Enum.PartType.Block;
       node.Size = new Vector3(7.5, 5.2, 6.4);
       node.CFrame = new CFrame(node.Position).mul(
         CFrame.Angles(
@@ -297,9 +277,16 @@ export class WorldArt {
         ),
       );
       node.Color = Color3.fromRGB(104, 110, 112);
-      node.Material = Enum.Material.Rock;
+      node.Material = Enum.Material.Slate;
+      if (
+        cloneOriginalArt("CoastalRock", node, node.Position.sub(new Vector3(0, 2.6, 0)), 0.85) !==
+        undefined
+      ) {
+        node.Transparency = 1;
+        return;
+      }
       for (let index = 0; index < 2; index += 1) {
-        const fragment = createWorldPart(
+        createWedge(
           `StoneFragment_${index}`,
           new Vector3(3.5 - index * 0.5, 2.8, 3.2),
           new CFrame(node.Position.add(new Vector3(index === 0 ? 3.2 : -3, -1, index * 1.8 - 1))),
@@ -308,7 +295,6 @@ export class WorldArt {
           node,
           { canCollide: false, canQuery: false },
         );
-        fragment.Shape = Enum.PartType.Ball;
       }
       return;
     }
@@ -318,8 +304,8 @@ export class WorldArt {
       node.Size = new Vector3(4.5, 2.5, 4.5);
       node.Color = Color3.fromRGB(64, 121, 59);
       node.Material = Enum.Material.LeafyGrass;
-      for (let index = 0; index < 7; index += 1) {
-        const angle = (index / 7) * math.pi * 2;
+      for (let index = 0; index < 4; index += 1) {
+        const angle = (index / 4) * math.pi * 2;
         createWedge(
           `FiberLeaf_${index}`,
           new Vector3(0.45, random.NextNumber(2.8, 4.5), 1.1),
@@ -345,6 +331,13 @@ export class WorldArt {
       );
       node.Color = Color3.fromRGB(126, 88, 55);
       node.Material = Enum.Material.CorrodedMetal;
+      if (
+        cloneOriginalArt("ScrapPile", node, node.Position.sub(new Vector3(0, 1.2, 0)), 1.15) !==
+        undefined
+      ) {
+        node.Transparency = 1;
+        return;
+      }
       for (let index = 0; index < 3; index += 1) {
         const pipe = verticalCylinder(
           `ScrapPipe_${index}`,
@@ -386,9 +379,9 @@ export class WorldArt {
     }
     const light = new Instance("PointLight");
     light.Color = Color3.fromRGB(76, 223, 255);
-    light.Brightness = 1.1;
-    light.Range = 13;
-    light.Shadows = true;
+    light.Brightness = 0.45;
+    light.Range = 10;
+    light.Shadows = false;
     light.Parent = node;
   }
 
@@ -397,15 +390,15 @@ export class WorldArt {
     coast.Name = "Coastline";
     coast.Parent = parent;
     const random = new Random(89341);
-    for (let index = 0; index < 56; index += 1) {
-      const angle = (index / 56) * math.pi * 2;
-      const radius = random.NextNumber(282, 297);
+    for (let index = 0; index < 24; index += 1) {
+      const angle = (index / 24) * math.pi * 2;
+      const radius = random.NextNumber(270, 283);
       const position = new Vector3(
         math.cos(angle) * radius,
         random.NextNumber(-1.4, -0.3),
         math.sin(angle) * radius,
       );
-      const rock = createWorldPart(
+      createWedge(
         `Cliff_${index}`,
         new Vector3(random.NextNumber(10, 18), random.NextNumber(5, 11), random.NextNumber(8, 15)),
         new CFrame(position).mul(
@@ -423,7 +416,6 @@ export class WorldArt {
         index % 3 === 0 ? Enum.Material.Slate : Enum.Material.Rock,
         coast,
       );
-      rock.Shape = Enum.PartType.Ball;
     }
   }
 
@@ -534,10 +526,11 @@ export class WorldArt {
       { canCollide: false },
     );
     const light = new Instance("PointLight");
-    light.Color = team.TeamColor.Color;
-    light.Brightness = 0.8;
-    light.Range = 18;
-    light.Shadows = true;
+    light.Color = Color3.fromRGB(250, 227, 184);
+    light.Brightness = 0.4;
+    light.Range = 12;
+    light.Shadows = false;
+    CollectionService.AddTag(light, "WorldAccentLight");
     light.Parent = lamp;
   }
 
@@ -583,24 +576,47 @@ export class WorldArt {
       Enum.Material.CorrodedMetal,
       model,
     );
+    for (const side of [-1, 1]) {
+      createWorldPart(
+        "PitchedWarehouseRoof",
+        new Vector3(23, 0.75, 38),
+        new CFrame(position.add(new Vector3(side * 10.7, 20, 0))).mul(
+          CFrame.Angles(0, 0, side * math.rad(-14)),
+        ),
+        Color3.fromRGB(86, 100, 99),
+        Enum.Material.Metal,
+        model,
+      );
+      createWorldPart(
+        "EntranceColumn",
+        new Vector3(1.1, 17, 1.1),
+        new CFrame(position.add(new Vector3(side * 17, 10, 17))),
+        Color3.fromRGB(119, 122, 107),
+        Enum.Material.Metal,
+        model,
+      );
+    }
     createWorldPart(
-      "WarehouseRoof",
-      new Vector3(44, 1.2, 36),
-      new CFrame(position.add(new Vector3(0, 17.5, 0))),
-      Color3.fromRGB(66, 72, 73),
+      "LoadingCanopy",
+      new Vector3(36, 0.65, 8),
+      new CFrame(position.add(new Vector3(0, 15.4, 20))),
+      Color3.fromRGB(109, 113, 93),
       Enum.Material.Metal,
       model,
     );
 
-    for (let index = 0; index < 5; index += 1) {
-      const x = -16 + index * 8;
+    for (let index = 0; index < 3; index += 1) {
+      const x = -12 + index * 12;
       createWorldPart(
-        "RoofRib",
-        new Vector3(0.5, 1, 36.5),
-        new CFrame(position.add(new Vector3(x, 18.25, 0))),
-        Color3.fromRGB(42, 48, 50),
-        Enum.Material.Metal,
+        "WarehouseSkylight",
+        new Vector3(4.5, 0.18, 9),
+        new CFrame(position.add(new Vector3(x, 22 - math.abs(x) * 0.24, -3))).mul(
+          CFrame.Angles(0, 0, x < 0 ? math.rad(14) : x > 0 ? math.rad(-14) : 0),
+        ),
+        Color3.fromRGB(154, 180, 173),
+        Enum.Material.SmoothPlastic,
         model,
+        { canCollide: false, canQuery: false, castShadow: false },
       );
     }
 
@@ -620,6 +636,7 @@ export class WorldArt {
       Color3.fromRGB(245, 172, 78),
     );
     this.createWorkbench(model, position.add(new Vector3(25, 0, 12)), math.rad(-90));
+    this.createCoverSet(model, position);
   }
 
   private createLaboratory(parent: Instance, position: Vector3): void {
@@ -715,6 +732,39 @@ export class WorldArt {
       Color3.fromRGB(88, 213, 239),
     );
     this.createWorkbench(model, position.add(new Vector3(25, 0, 12)), math.rad(-90));
+    // A recognisable research silhouette, readable above the tree line without a neon tower.
+    verticalCylinder(
+      "AntennaMast",
+      position.add(new Vector3(-12, 25, -8)),
+      21,
+      0.7,
+      Color3.fromRGB(144, 154, 151),
+      Enum.Material.Metal,
+      model,
+    );
+    const dish = createWorldPart(
+      "ResearchDish",
+      new Vector3(10, 1.1, 10),
+      new CFrame(position.add(new Vector3(-12, 35, -8))).mul(
+        CFrame.Angles(math.rad(25), 0, math.rad(12)),
+      ),
+      Color3.fromRGB(192, 199, 183),
+      Enum.Material.SmoothPlastic,
+      model,
+      { canCollide: false },
+    );
+    dish.Shape = Enum.PartType.Ball;
+    beamBetween(
+      "DishFeed",
+      position.add(new Vector3(-12, 35, -8)),
+      position.add(new Vector3(-12, 39, -8)),
+      0.3,
+      Color3.fromRGB(107, 119, 116),
+      Enum.Material.Metal,
+      model,
+      { canCollide: false, canQuery: false },
+    );
+    this.createCoverSet(model, position);
   }
 
   private createPowerStation(parent: Instance, position: Vector3): void {
@@ -756,9 +806,10 @@ export class WorldArt {
     }
     const coreLight = new Instance("PointLight");
     coreLight.Color = Color3.fromRGB(177, 103, 232);
-    coreLight.Brightness = 1;
-    coreLight.Range = 24;
-    coreLight.Shadows = true;
+    coreLight.Brightness = 0.4;
+    coreLight.Range = 16;
+    coreLight.Shadows = false;
+    CollectionService.AddTag(coreLight, "WorldAccentLight");
     coreLight.Parent = reactor;
 
     for (let index = 0; index < 4; index += 1) {
@@ -766,8 +817,8 @@ export class WorldArt {
       const base = position.add(new Vector3(math.cos(angle) * 18, 0, math.sin(angle) * 15));
       verticalCylinder(
         "CoolingStack",
-        base.add(new Vector3(0, 7, 0)),
-        12,
+        base.add(new Vector3(0, index % 2 === 0 ? 14 : 10, 0)),
+        index % 2 === 0 ? 26 : 18,
         4.5,
         Color3.fromRGB(83, 89, 91),
         Enum.Material.Metal,
@@ -790,6 +841,7 @@ export class WorldArt {
       Color3.fromRGB(188, 105, 235),
     );
     this.createWorkbench(model, position.add(new Vector3(25, 0, 13)), math.rad(-90));
+    this.createCoverSet(model, position);
   }
 
   private createMonumentBase(
@@ -800,6 +852,7 @@ export class WorldArt {
   ): Model {
     const model = new Instance("Model");
     model.Name = name;
+    model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic;
     model.Parent = parent;
     createWorldPart(
       "Platform",
@@ -818,7 +871,7 @@ export class WorldArt {
           CFrame.Angles(0, -angle, 0),
         ),
         index % 2 === 0 ? accent : Color3.fromRGB(35, 39, 40),
-        Enum.Material.Neon,
+        Enum.Material.SmoothPlastic,
         model,
         { canCollide: false },
       );
@@ -874,9 +927,10 @@ export class WorldArt {
     );
     const light = new Instance("PointLight");
     light.Color = color;
-    light.Brightness = 1.1;
-    light.Range = 22;
-    light.Shadows = true;
+    light.Brightness = 0.45;
+    light.Range = 14;
+    light.Shadows = false;
+    CollectionService.AddTag(light, "WorldAccentLight");
     light.Parent = lamp;
   }
 
@@ -902,11 +956,55 @@ export class WorldArt {
     }
   }
 
+  private createCoverSet(parent: Instance, position: Vector3): void {
+    for (let index = 0; index < 3; index += 1) {
+      const offset =
+        index === 0
+          ? new Vector3(-25, 2.05, 19)
+          : index === 1
+            ? new Vector3(21, 2.05, 22)
+            : new Vector3(-26, 2.05, -16);
+      const ground = position.add(offset);
+      if (
+        cloneOriginalArt(
+          "SupplyCrate",
+          parent,
+          ground,
+          index === 1 ? 1.2 : 1.0,
+          (index * math.pi) / 2,
+          true,
+        ) !== undefined
+      ) {
+        continue;
+      }
+      createWorldPart(
+        "SupplyCrate",
+        new Vector3(5, 3.8, 3.8),
+        new CFrame(ground.add(new Vector3(0, 1.9, 0))),
+        Color3.fromRGB(147, 117, 78),
+        Enum.Material.WoodPlanks,
+        parent,
+      );
+      createWorldPart(
+        "CrateBrace",
+        new Vector3(5.15, 0.35, 4),
+        new CFrame(ground.add(new Vector3(0, 2.9, 0))),
+        Color3.fromRGB(91, 104, 104),
+        Enum.Material.Metal,
+        parent,
+        { canCollide: false, canQuery: false },
+      );
+    }
+  }
+
   private createWorkbench(parent: Instance, position: Vector3, yaw: number): void {
+    const workbenchOrigin = new CFrame(position.add(new Vector3(0, 2, 0))).mul(
+      CFrame.Angles(0, yaw, 0),
+    );
     const root = createWorldPart(
       "PublicWorkbench",
       new Vector3(7, 0.8, 3.5),
-      new CFrame(position.add(new Vector3(0, 3.2, 0))).mul(CFrame.Angles(0, yaw, 0)),
+      workbenchOrigin.mul(new CFrame(0, 3.2, 0)),
       Color3.fromRGB(84, 96, 102),
       Enum.Material.DiamondPlate,
       parent,
@@ -916,7 +1014,7 @@ export class WorldArt {
         createWorldPart(
           "WorkbenchLeg",
           new Vector3(0.45, 3, 0.45),
-          new CFrame(position.add(new Vector3(x, 1.5, z))),
+          workbenchOrigin.mul(new CFrame(x, 1.5, z)),
           Color3.fromRGB(58, 63, 65),
           Enum.Material.Metal,
           root,
@@ -926,7 +1024,7 @@ export class WorldArt {
     createWorldPart(
       "Toolbox",
       new Vector3(2.4, 1.2, 1.4),
-      new CFrame(position.add(new Vector3(1.4, 4.1, 0))),
+      workbenchOrigin.mul(new CFrame(1.4, 4.1, 0)),
       Color3.fromRGB(181, 110, 53),
       Enum.Material.Metal,
       root,
@@ -935,7 +1033,7 @@ export class WorldArt {
     CollectionService.AddTag(root, "Workbench");
   }
 
-  private createExtractionRing(parent: Instance): void {
+  public createExtractionRing(parent: Instance): void {
     const trigger = createWorldPart(
       "ExtractionZone",
       new Vector3(34, 1, 34),
@@ -977,64 +1075,123 @@ export class WorldArt {
     light.Parent = centerLamp;
   }
 
-  private createPath(parent: Instance, start: Vector3, finish: Vector3, width: number): void {
-    const direction = finish.sub(start);
-    const path = createWorldPart(
-      "WeatheredPath",
-      new Vector3(width, 0.28, direction.Magnitude),
-      CFrame.lookAt(start.Lerp(finish, 0.5).add(new Vector3(0, 0.11, 0)), finish),
-      Color3.fromRGB(113, 104, 87),
-      Enum.Material.Ground,
-      parent,
-    );
-    path.CastShadow = false;
+  private createRouteMarkers(parent: Instance, start: Vector3, finish: Vector3): void {
+    const direction = finish.sub(start).Unit;
+    const side = new Vector3(-direction.Z, 0, direction.X);
+    for (const progress of [0.3, 0.65]) {
+      const point = start.Lerp(finish, progress).add(side.mul(7.5));
+      const post = createWorldPart(
+        "RoutePost",
+        new Vector3(0.55, 2.8, 0.55),
+        new CFrame(point.add(new Vector3(0, 1.4, 0))),
+        Color3.fromRGB(91, 88, 74),
+        Enum.Material.Wood,
+        parent,
+        { canCollide: false, canQuery: false, castShadow: false },
+      );
+      createWorldPart(
+        "RouteReflector",
+        new Vector3(0.68, 0.3, 0.68),
+        post.CFrame.add(new Vector3(0, 0.8, 0)),
+        Color3.fromRGB(193, 185, 129),
+        Enum.Material.SmoothPlastic,
+        parent,
+        { canCollide: false, canQuery: false, castShadow: false },
+      );
+    }
   }
 
   private createTree(parent: Instance, position: Vector3, random: Random, index: number): void {
+    const ground = surfacePositionAt(position, Workspace.Terrain);
+    const scale = random.NextNumber(0.85, 1.2);
+    const imported = cloneOriginalArt(
+      "CoastalPine",
+      parent,
+      ground,
+      scale,
+      random.NextNumber(0, math.pi * 2),
+    );
+    if (imported !== undefined) {
+      const trunk = verticalCylinder(
+        "TreeCollider",
+        ground.add(new Vector3(0, 5, 0)),
+        10,
+        1.7 * scale,
+        Color3.fromRGB(92, 74, 54),
+        Enum.Material.Wood,
+        imported,
+        { transparency: 1, castShadow: false },
+      );
+      trunk.CanQuery = true;
+      return;
+    }
     const tree = new Instance("Model");
     tree.Name = `Pine_${index}`;
+    tree.ModelStreamingMode = Enum.ModelStreamingMode.Atomic;
     tree.Parent = parent;
-    const height = random.NextNumber(13, 20);
-    const trunkColor = Color3.fromRGB(
-      random.NextInteger(83, 104),
-      random.NextInteger(62, 78),
-      random.NextInteger(44, 56),
-    );
+    const height = 19 * scale;
     verticalCylinder(
       "Trunk",
-      position.add(new Vector3(0, height / 2, 0)),
-      height,
-      random.NextNumber(1.7, 2.5),
-      trunkColor,
+      ground.add(new Vector3(0, height * 0.36, 0)),
+      height * 0.72,
+      1.7 * scale,
+      Color3.fromRGB(100, 80, 57),
       Enum.Material.Wood,
       tree,
     );
+    this.createBranchedCrown(tree, ground, height, random);
+  }
 
-    const crownColor = Color3.fromRGB(
-      random.NextInteger(43, 59),
-      random.NextInteger(88, 112),
-      random.NextInteger(46, 62),
-    );
-    for (let layer = 0; layer < 4; layer += 1) {
+  private createBranchedCrown(
+    parent: Instance,
+    ground: Vector3,
+    height: number,
+    random: Random,
+  ): void {
+    const rotation = random.NextNumber(0, math.pi * 2);
+    for (let index = 0; index < 3; index += 1) {
+      const angle = rotation + index * 2.4;
+      const extent = height * (0.21 - index * 0.025);
+      const branchTip = ground.add(
+        new Vector3(
+          math.cos(angle) * extent,
+          height * (0.57 + index * 0.12),
+          math.sin(angle) * extent,
+        ),
+      );
+      beamBetween(
+        "Branch",
+        ground.add(new Vector3(0, height * (0.35 + index * 0.13), 0)),
+        branchTip,
+        0.7 - index * 0.12,
+        Color3.fromRGB(95, 75, 53),
+        Enum.Material.Wood,
+        parent,
+        { canCollide: false, canQuery: false },
+      );
       const foliage = createWorldPart(
         "Foliage",
-        new Vector3(9 - layer * 1.3, 5.5, 9 - layer * 1.3),
-        new CFrame(
-          position.add(
-            new Vector3(
-              random.NextNumber(-0.4, 0.4),
-              height * 0.55 + layer * 2.2,
-              random.NextNumber(-0.4, 0.4),
-            ),
-          ),
+        new Vector3(height * 0.47, height * 0.34, height * 0.35),
+        new CFrame(branchTip.add(new Vector3(0, height * 0.09, 0))).mul(
+          CFrame.Angles(0.15, -angle, -0.12),
         ),
-        crownColor.Lerp(Color3.fromRGB(78, 126, 62), layer * 0.08),
-        Enum.Material.LeafyGrass,
-        tree,
+        Color3.fromRGB(64 + index * 9, 100 + index * 11, 59 + index * 3),
+        Enum.Material.Grass,
+        parent,
         { canCollide: false, canQuery: false },
       );
       foliage.Shape = Enum.PartType.Ball;
     }
+    const top = createWorldPart(
+      "Treetop",
+      new Vector3(height * 0.29, height * 0.35, height * 0.27),
+      new CFrame(ground.add(new Vector3(-0.5, height * 0.91, 0.6))),
+      Color3.fromRGB(87, 127, 67),
+      Enum.Material.Grass,
+      parent,
+      { canCollide: false, canQuery: false },
+    );
+    top.Shape = Enum.PartType.Ball;
   }
 
   private createRockCluster(
@@ -1043,17 +1200,30 @@ export class WorldArt {
     random: Random,
     index: number,
   ): void {
+    const ground = surfacePositionAt(position, Workspace.Terrain);
+    if (
+      cloneOriginalArt(
+        "CoastalRock",
+        parent,
+        ground,
+        random.NextNumber(0.8, 1.3),
+        random.NextNumber(0, math.pi * 2),
+        true,
+      ) !== undefined
+    ) {
+      return;
+    }
     const cluster = new Instance("Model");
     cluster.Name = `RockCluster_${index}`;
     cluster.Parent = parent;
-    const count = random.NextInteger(2, 4);
-    for (let fragment = 0; fragment < count; fragment += 1) {
+    cluster.ModelStreamingMode = Enum.ModelStreamingMode.Atomic;
+    for (let fragment = 0; fragment < 2; fragment += 1) {
       const size = random.NextNumber(2.5, 6);
-      const rock = createWorldPart(
+      createWedge(
         "Rock",
         new Vector3(size, size * random.NextNumber(0.55, 0.85), size * random.NextNumber(0.8, 1.2)),
         new CFrame(
-          position.add(
+          ground.add(
             new Vector3(random.NextNumber(-2.5, 2.5), size * 0.25, random.NextNumber(-2.5, 2.5)),
           ),
         ).mul(
@@ -1071,7 +1241,6 @@ export class WorldArt {
         fragment % 2 === 0 ? Enum.Material.Rock : Enum.Material.Slate,
         cluster,
       );
-      rock.Shape = Enum.PartType.Ball;
     }
   }
 
@@ -1081,17 +1250,19 @@ export class WorldArt {
     random: Random,
     index: number,
   ): void {
+    const ground = surfacePositionAt(position, Workspace.Terrain);
     const tuft = new Instance("Model");
     tuft.Name = `WildGrass_${index}`;
     tuft.Parent = parent;
-    for (let blade = 0; blade < 4; blade += 1) {
-      const angle = (blade / 4) * math.pi * 2 + random.NextNumber(-0.3, 0.3);
+    CollectionService.AddTag(tuft, "OptionalWorldDetail");
+    for (let blade = 0; blade < 2; blade += 1) {
+      const angle = (blade / 2) * math.pi * 2 + random.NextNumber(-0.3, 0.3);
       createWedge(
         "Blade",
         new Vector3(0.25, random.NextNumber(1.5, 3.2), random.NextNumber(0.5, 0.9)),
-        new CFrame(
-          position.add(new Vector3(math.cos(angle) * 0.5, 0.8, math.sin(angle) * 0.5)),
-        ).mul(CFrame.Angles(random.NextNumber(-0.25, 0.25), -angle, random.NextNumber(-0.2, 0.2))),
+        new CFrame(ground.add(new Vector3(math.cos(angle) * 0.5, 0.8, math.sin(angle) * 0.5))).mul(
+          CFrame.Angles(random.NextNumber(-0.25, 0.25), -angle, random.NextNumber(-0.2, 0.2)),
+        ),
         Color3.fromRGB(
           random.NextInteger(69, 91),
           random.NextInteger(119, 151),
@@ -1110,6 +1281,19 @@ export class WorldArt {
     random: Random,
     index: number,
   ): void {
+    const ground = surfacePositionAt(position, Workspace.Terrain);
+    if (
+      cloneOriginalArt(
+        "SupplyCrate",
+        parent,
+        ground,
+        random.NextNumber(0.7, 1.0),
+        random.NextNumber(0, math.pi),
+        true,
+      ) !== undefined
+    ) {
+      return;
+    }
     const debris = new Instance("Model");
     debris.Name = `AbandonedDebris_${index}`;
     debris.Parent = parent;
@@ -1117,7 +1301,7 @@ export class WorldArt {
     createWorldPart(
       "BrokenPanel",
       new Vector3(random.NextNumber(4, 7), 0.45, random.NextNumber(2, 4)),
-      new CFrame(position.add(new Vector3(0, 0.5, 0))).mul(
+      new CFrame(ground.add(new Vector3(0, 0.5, 0))).mul(
         CFrame.Angles(random.NextNumber(-0.2, 0.2), yaw, random.NextNumber(-0.3, 0.3)),
       ),
       Color3.fromRGB(
@@ -1130,7 +1314,7 @@ export class WorldArt {
     );
     verticalCylinder(
       "BrokenPipe",
-      position.add(new Vector3(1.8, 1.1, -0.4)),
+      ground.add(new Vector3(1.8, 1.1, -0.4)),
       random.NextNumber(3, 6),
       0.6,
       Color3.fromRGB(76, 82, 83),
@@ -1151,25 +1335,25 @@ export class WorldArt {
   }
 
   private isSceneryPositionFree(position: Vector3, clearance: number): boolean {
-    if (horizontalDistance(position, Vector3.zero) < clearance + 35) {
+    if (isProtectedWorldPosition(position, clearance)) {
       return false;
     }
-    for (const monument of MONUMENT_POSITIONS) {
-      if (horizontalDistance(position, monument) < clearance + 35) {
-        return false;
-      }
-    }
-    const spawnPositions = [
-      new Vector3(205, 0, 0),
-      new Vector3(-205, 0, 0),
-      new Vector3(0, 0, 205),
-      new Vector3(0, 0, -205),
-    ];
-    for (const spawn of spawnPositions) {
-      if (horizontalDistance(position, spawn) < clearance + 22) {
-        return false;
-      }
-    }
-    return true;
+    const world = Workspace.FindFirstChild("World");
+    const resources = world?.FindFirstChild("GeneratedWorld")?.FindFirstChild("Resources");
+    const authored = world?.FindFirstChild("AuthoredEnvironment");
+    const avoid = new Array<Instance>();
+    if (resources !== undefined) avoid.push(resources);
+    if (authored !== undefined) avoid.push(authored);
+    if (avoid.isEmpty()) return true;
+    const parameters = new OverlapParams();
+    parameters.FilterType = Enum.RaycastFilterType.Include;
+    parameters.FilterDescendantsInstances = avoid;
+    parameters.MaxParts = 1;
+    const ground = surfacePositionAt(position, Workspace.Terrain);
+    return Workspace.GetPartBoundsInBox(
+      new CFrame(ground.add(new Vector3(0, 7, 0))),
+      new Vector3(clearance * 2 + 8, 14, clearance * 2 + 8),
+      parameters,
+    ).isEmpty();
   }
 }

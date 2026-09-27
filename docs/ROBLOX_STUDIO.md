@@ -1,50 +1,94 @@
-# Roblox Studio: ciò che ti serve davvero
+# Roblox Studio setup and controls
 
-Il progetto è volutamente **code-first**. Non devi scrivere Luau dentro Roblox Studio:
-programmiamo in TypeScript e lasciamo a roblox-ts il compito di tradurlo.
+The source is code-first: edit TypeScript in this repository, compile it with roblox-ts and use
+Rojo to assemble or synchronize the place. Studio is still required to run Roblox physics,
+rendering, avatars, networking and platform services.
 
-Studio rimane indispensabile perché è il motore che esegue fisica, personaggi, server e client,
-mostra il mondo 3D e pubblica il gioco su Roblox.
+## Open one known candidate
 
-## Primo avvio rapido
+1. From this repository, run npm run check to generate the current candidate.
+2. Reuse the existing Studio window. Resolve any unsaved work before switching places.
+3. Use Studio's file-opening command to select build/WarWorld.rbxlx in this checkout.
+4. Start Play and keep Output visible. The environment is generated when the server starts;
+   a sparse editor viewport before Play is not by itself a startup failure.
+5. Record the candidate commit/build timestamp and relevant client/server errors.
 
-Il file `build/WarWorld.rbxlx` è già stato generato. Fai doppio clic sul file, oppure aprilo da
-Studio con **File → Open from File**, poi premi **Play**. È il modo più semplice per vedere subito
-il prototipo; il mondo compare quando parte il server ed è normale che prima sembri vuoto.
+Do not select an AutoSave recovery file, a .lock file or an older Desktop build by accident.
+Generating a new file does not update a previously opened place automatically. Stop the test and
+reopen the known build, or deliberately use the live-sync workflow below. Do not repeatedly open
+new Studio application sessions.
 
-## Collegamento per sviluppare
+## Live development
 
-1. Installa e apri il plugin ufficiale Rojo in Roblox Studio.
-2. Nel terminale, entra nella cartella `worldwar` ed esegui `npm run watch`.
-3. In un secondo terminale, nella stessa cartella, esegui `npm run rojo:serve`.
-4. Apri un'esperienza Baseplate vuota in Studio.
-5. Dal plugin Rojo collegati a `localhost:34872` e accetta la prima sincronizzazione.
-6. Premi **Play**. Ogni modifica TypeScript valida verrà ricompilata e sincronizzata.
+Run one compiler watcher and one Rojo server from this repository, in separate terminals:
 
-## I pannelli da imparare per primi
+```sh
+npm run watch
+```
 
-- **Explorer**: mostra la gerarchia di tutti gli oggetti del gioco.
-- **Properties**: contiene i valori dell'oggetto selezionato.
-- **Output**: mostra messaggi, avvisi ed errori di client e server.
-- **Test**: avvia un server locale con uno o più giocatori simulati.
-- **Developer Console / MicroProfiler**: aiuta a trovare problemi di rete o prestazioni.
+```sh
+npm run rojo:serve
+```
 
-Non devi modificare manualmente gli script presenti in Explorer: verrebbero sovrascritti dalla
-sincronizzazione. Modifica sempre i file TypeScript dentro `src`.
+Connect the Studio Rojo plugin to the CLI-reported address, normally localhost:34872, and verify
+the mapping before synchronization. Edit files in src, not the generated scripts shown in
+Explorer. Stop Play before changing authored scene data or switching between different places.
 
-## Test con più giocatori
+## Controls
 
-Apri **Test → Server & Clients**, scegli almeno due client e avvia la sessione. Ogni finestra è un
-giocatore separato collegato allo stesso server locale. In questo modo puoi verificare PvP,
-proprietà delle costruzioni, casse di recupero, punteggi e cambi di fase.
+| Action                             | Keyboard / mouse                     | Controller            | Touch                       |
+| ---------------------------------- | ------------------------------------ | --------------------- | --------------------------- |
+| Move / jump                        | WASD / Space                         | Left stick / A        | Native joystick / jump      |
+| Aim                                | Mouse or trackpad                    | Right stick           | Drag view                   |
+| Select mode                        | 1 Gather, 2 Build, 3 Blaster, 4 Raid | LB / RB               | Mode buttons                |
+| Use selected action                | Left click or F                      | RT                    | Action button               |
+| Open kit menu                      | V                                    | L3                    | Kit button                  |
+| Open guide                         | T or ? button                        | Guide tab in kit menu | ? button                    |
+| Rotate construction                | R                                    | Y                     | Rotate button in Build mode |
+| Use repair patch                   | B                                    | D-pad down            | Repair button               |
+| Interact with depot / door / cache | Native E prompt                      | Native X prompt       | Native prompt               |
+| Navigate menus                     | Pointer / buttons                    | D-pad and A           | Tap                         |
+| Close menu / back                  | Menu close button or V               | B                     | Close button                |
 
-Una campagna Studio dura circa tre minuti; quella pubblica è configurata per 35 minuti.
+Holding the action repeats gathering and blaster fire subject to server cooldowns. Alt/Option
+temporarily releases the pointer on desktop; releasing it restores aiming. Menu navigation is
+intended to work without holding Alt. F is a keyboard action alternative, but aiming still
+requires a mouse, trackpad or another supported pointing input.
 
-## Regola di sicurezza importante
+The kit menu contains Guide, Craft, Build and Settings. Selecting a construction closes the menu
+to place it. Weapon motion can be disabled in Settings; camera shake is disabled. These settings
+last for the current session. Graphics quality uses the standard Roblox control; there is no
+separate custom quality selector.
 
-Non inserire modelli casuali dal Toolbox. Possono contenere script indesiderati, backdoor o asset
-molto pesanti. Importa soltanto elementi controllati e conserva tutta la logica di gameplay in
-questo progetto.
+These are implemented bindings, not proof of hardware compatibility. Verify them on actual
+keyboard/trackpad, touch and controller devices, including respawn and focus changes.
 
-Per provare i salvataggi in Studio usa un'esperienza di test separata e abilita l'accesso API
-soltanto lì. Senza accesso API il progetto usa intenzionalmente un profilo temporaneo.
+## Multiplayer and diagnostics
+
+Use Studio's local server/client test controls with at least two clients for PvP, ownership,
+depot theft and reward tests. These are intentional test players, not duplicate editor sessions.
+A Studio round lasts 5 minutes 30 seconds plus 15 seconds between rounds. Public timings are
+20 minutes plus intermission.
+
+Useful panels are Explorer, Properties and Output. Use the Developer Console and MicroProfiler
+for timing/memory evidence. Device emulation checks layout and input assumptions, not actual
+mobile GPU performance. Follow the [playtest checklist](PLAYTEST_CHECKLIST.md) and record results
+using the [test plan](TEST_PLAN.md).
+
+## Persistence and assets
+
+Test persistence in a separate private experience with dedicated data. Enable Studio API access
+only for that test experience when required. Without API access, Studio uses temporary profiles
+that are never written into persistent records. A production session with unavailable/locked data
+must not continue with a replacement blank persistent profile.
+
+The initial asset budget is zero. Prefer original project assets; review provenance and embedded
+scripts before any third-party import. On 2026-09-27, the original combined `WorldArtLibrary.glb`
+was uploaded successfully under `Xriccard0xxxfire` and all four colored models were visible in the
+editor of the saved `build/WarWorldArt.rbxlx` authoring place, not only in the import preview.
+The saved library contains 12 MeshParts with Roblox mesh IDs and shared texture `96332452588684`.
+
+Follow the [world-kit workflow](../assets/original/world-kit/README.md) to retain the imported
+templates in the source-backed library and rebuild the game. Existing asset IDs do not need
+another upload. Authoring-place inspection does not pass in-game rendering, collision, round-reset,
+multiplayer or private-staging delivery checks; those and real-device tests remain open.

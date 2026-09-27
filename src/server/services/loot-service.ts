@@ -3,6 +3,7 @@ import type { ItemId } from "shared/catalog/items";
 import { localized, sourceFor, type LocalizedMessage } from "shared/localization/translations";
 import { PlayerStateService } from "server/services/player-state-service";
 import { TeamService } from "server/services/team-service";
+import { canInteract } from "server/services/interaction-guard";
 
 const TEAM_PRIORITY_SECONDS = 7;
 const LOOT_LIFETIME_SECONDS = 120;
@@ -63,8 +64,9 @@ export class LootService {
     prompt.AutoLocalize = true;
     prompt.RootLocalizationTable = this.localizationTable;
     prompt.KeyboardKeyCode = Enum.KeyCode.E;
+    prompt.GamepadKeyCode = Enum.KeyCode.ButtonX;
     prompt.MaxActivationDistance = 11;
-    prompt.RequiresLineOfSight = false;
+    prompt.RequiresLineOfSight = true;
     prompt.HoldDuration = 0.35;
     prompt.Parent = crate;
 
@@ -76,7 +78,12 @@ export class LootService {
         return;
       }
       const state = this.playerState.get(collector);
-      if (state === undefined || state.isSpectator) {
+      if (
+        state === undefined ||
+        state.isSpectator ||
+        Workspace.GetAttribute("MatchPhase") === "Complete" ||
+        !canInteract(collector, crate, 12)
+      ) {
         return;
       }
       if (
